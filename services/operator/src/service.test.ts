@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { privateKeyToAccount } from 'viem/accounts';
 import { caseIdFor, CONFIG, disputeMessage, encodeReportPayload, targetHash, type Corroboration } from '@lookout/core';
-import { generateKeys, metaAddress } from '@lookout/stealth';
 import { memoryJournal } from './journal.ts';
 import { listDisputes, planReports, type AttestationRow, type PlanPorts, type ReportRow } from './reports.ts';
 import { createOperatorApi, createOperatorService, type ServiceDeps } from './service.ts';
@@ -12,26 +11,24 @@ const REPORTER = '0x' + 'a1'.repeat(20);
 const DOMAIN = 'evil-site.example';
 const DH = targetHash('domain', DOMAIN);
 const TX = '0x' + 'ab'.repeat(32);
-const META = metaAddress(generateKeys());
 const T0 = 1_000_000;
-const sealed = new Uint8Array(128).fill(5);
 const row = (over: Partial<ReportRow> = {}): ReportRow => ({
   key: '0x' + '01'.repeat(32), creator: REPORTER, reportId: '1'.repeat(32), targetHash: DH, createdAt: T0,
-  payload: encodeReportPayload({ kind: 'domain', value: DOMAIN, sealed }), ...over,
+  payload: encodeReportPayload({ kind: 'domain', value: DOMAIN }), ...over,
 });
-const ports = (status: 'locked' | 'returned' | 'none' = 'locked', open: string | null = 'st:eth:0xsecretmeta'): PlanPorts & { asked: string[] } => {
+const ports = (status: 'locked' | 'returned' | 'none' = 'locked'): PlanPorts & { asked: string[] } => {
   const asked: string[] = [];
-  return { asked, deposit: async (r, id) => (asked.push(`${r}:${id}`), { status }), openSealed: () => open };
+  return { asked, deposit: async (r, id) => (asked.push(`${r}:${id}`), { status }) };
 };
 
 /* ------------------------------- planning ------------------------------- */
 
-test('REPORT: a report with a locked deposit and a matching payload is planned, with the plain target and the opened bounty address', async () => {
+test('REPORT: a report with a locked deposit and a matching payload is planned, with the plain target', async () => {
   const p = ports();
   const { reports, skipped } = await planReports([row()], p);
   assert.deepEqual(skipped, []);
   assert.equal(reports.length, 1);
-  assert.deepEqual([reports[0].kind, reports[0].value, reports[0].reporterMeta, reports[0].createdAt], ['domain', DOMAIN, 'st:eth:0xsecretmeta', T0]);
+  assert.deepEqual([reports[0].kind, reports[0].value, reports[0].createdAt], ['domain', DOMAIN, T0]);
   assert.deepEqual(p.asked, [`${REPORTER}:${'1'.repeat(32)}`], 'the contract was asked about exactly this reporter and report');
 });
 
@@ -43,14 +40,13 @@ test('REPORT: only a LOCKED deposit counts (already settled or never deposited a
   }
 });
 
-test('REPORT: a payload naming another target, or no payload, is skipped; an unopenable bounty address still plans the report; a down RPC is skipped for now', async () => {
+test('REPORT: a payload naming another target, or no payload, is skipped; a down RPC is skipped for now', async () => {
   const wrong = row({ payload: encodeReportPayload({ kind: 'domain', value: 'innocent.example' }) });
   const none = row({ key: '0x' + '02'.repeat(32), payload: undefined });
   const r1 = await planReports([wrong, none], ports());
   assert.equal(r1.reports.length, 0);
   assert.deepEqual(r1.skipped.map((s) => s.reason.slice(0, 20)), ['the target in the pa', 'the report has no pa']);
-  assert.equal((await planReports([row()], ports('locked', null))).reports[0].reporterMeta, undefined);
-  const down: PlanPorts = { deposit: async () => { throw new Error('rpc down'); }, openSealed: () => null };
+  const down: PlanPorts = { deposit: async () => { throw new Error('rpc down'); } };
   assert.match((await planReports([row()], down)).skipped[0].reason, /escrow lookup failed: rpc down/);
 });
 
@@ -87,7 +83,7 @@ function rig(over: Partial<ServiceDeps> = {}) {
   const journal = memoryJournal();
   const humans = new Set<string>();
   const deposits = [{ reporter: REPORTER as `0x${string}`, reportId: '1'.repeat(32), amount: 10n ** 15n, txHash: TX as `0x${string}`, blockNumber: 60n }];
-  const settled: { kind: 'confirmed'; reporter: `0x${string}`; reportId: string; txHash: `0x${string}`; blockNumber: bigint }[] = [];
+  const settled: { kind: 'confirmed'; bountyWei: bigint; reporter: `0x${string}`; reportId: string; txHash: `0x${string}`; blockNumber: bigint }[] = [];
   const arkiv = {
     async createEntity(_s: unknown, v: Record<string, unknown>) { w.created.push(v); return { entityKey: `0x${w.created.length.toString(16).padStart(64, '0')}`, txHash: TX, expiresAt: 0 }; },
     async extendEntity() { return { expiresAt: 0 }; },
@@ -96,16 +92,16 @@ function rig(over: Partial<ServiceDeps> = {}) {
   const escrowFake = {
     deposit: async () => ({ status: 'locked' as const, lockedAt: 0n }), confirm: async () => ({ hash: '0xc', blockNumber: 1n, gasUsed: 1n }),
     refund: async () => ({ hash: '0xr', blockNumber: 1n, gasUsed: 1n }), reject: async () => ({ hash: '0xj', blockNumber: 1n, gasUsed: 1n }),
-    payBounty: async () => ({ hash: '0xb', blockNumber: 1n, gasUsed: 1n }), bountyPaid: async () => false,
+    bountyPool: async () => 10n ** 18n,
   };
   const deps: ServiceDeps = {
     journal, humans: () => humans, arkiv, escrowFromBlock: 50n, latestEscrowBlock: async () => w.ebl, now: () => w.t, checkpointEverySeconds: 600,
     resolver: {
-      arkiv, escrow: escrowFake as never, journal, stealthPayerSecret: new Uint8Array(32).fill(7), now: () => w.t, bountyTier: 1, humans: () => humans,
+      arkiv, escrow: escrowFake as never, journal, now: () => w.t, humans: () => humans,
       evidence: { signalsFor: async () => (w.flagged ? [{ sourceType: 'feed', sourceId: 'openfeed', level: 'block', createdAt: w.t - 10, creator: '0x' + 'f1'.repeat(20), entityKey: '0x' + '09'.repeat(32) } as Corroboration] : []) },
     },
     source: { reports: async () => { if (w.fail.has('reports')) throw new Error('arkiv down'); return [row()]; }, attestations: async () => [] },
-    planPorts: { deposit: async () => ({ status: 'locked' }), openSealed: () => META },
+    planPorts: { deposit: async () => ({ status: 'locked' }) },
     escrow: { depositEvents: async () => { if (w.fail.has('escrow')) throw new Error('rpc down'); return deposits; }, settledEvents: async () => settled },
     ...over,
   };
@@ -158,7 +154,7 @@ test('FAILURE ISOLATION: a broken escrow RPC does not stop resolving, and a brok
 
 test('a settlement whose deposit is not mirrored yet is retried, and the cursor does not skip past it', async () => {
   const { service, settled, journal } = rig();
-  settled.push({ kind: 'confirmed', reporter: ('0x' + 'bb'.repeat(20)) as `0x${string}`, reportId: '9'.repeat(32), txHash: TX as `0x${string}`, blockNumber: 70n });
+  settled.push({ kind: 'confirmed', bountyWei: 0n, reporter: ('0x' + 'bb'.repeat(20)) as `0x${string}`, reportId: '9'.repeat(32), txHash: TX as `0x${string}`, blockNumber: 70n });
   const r = await service.tick();
   assert.equal(r.mirrored?.waiting, 1);
   assert.equal(journal.detail('service:escrow-cursor'), undefined);
@@ -173,7 +169,7 @@ test('reputation: a verified human appears in the checkpoint at the floor, and a
   assert.equal(service.reputation()?.scores.has('0x' + 'cc'.repeat(20)), false);
 });
 
-test('API: reports and disputes are listed read-only, filterable by report id, and the opened bounty address never appears', async () => {
+test('API: reports and disputes are listed read-only and filterable by report id', async () => {
   const { w, service, humans } = rig();
   humans.add(REPORTER);
   await service.tick();
@@ -187,7 +183,6 @@ test('API: reports and disputes are listed read-only, filterable by report id, a
     const all = (await (await fetch(`${base}/reports`)).json()) as { reports: { reportId: string; state: string }[] };
     assert.equal(all.reports.length, 1);
     assert.equal(all.reports[0].state, 'confirmed');
-    assert.ok(!JSON.stringify(all).includes(META.slice(10, 40)), 'the opened meta-address is private');
     assert.equal(((await (await fetch(`${base}/reports?reportId=${'1'.repeat(32)}`)).json()) as { reports: unknown[] }).reports.length, 1);
     assert.equal(((await (await fetch(`${base}/reports?reportId=${'2'.repeat(32)}`)).json()) as { reports: unknown[] }).reports.length, 0);
     assert.equal((await fetch(`${base}/reports?reportId=nope`)).status, 400);

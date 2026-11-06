@@ -7,8 +7,7 @@
 //   reject <reporter> <reportId>         forfeit a report's deposit to the bounty pool. The ONLY way a deposit is ever forfeited.
 //
 // Configuration comes from the repo-root .env and is never printed: ARKIV_ACCESS_KEY, ARKIV_PRIVATE_KEY (the operator wallet, which
-// is also the escrow resolver), ESCROW_ADDRESS, ESCROW_DEPLOY_BLOCK, PANEL_PAYER_SECRET and PANEL_ENC_SECRET (made by
-// `npm run operator:keys`), and optionally ESCROW_RPC_URL, WORLDID_DB, LOOKOUT_DATA_DIR.
+// is also the escrow resolver), ESCROW_ADDRESS, ESCROW_DEPLOY_BLOCK, and optionally ESCROW_RPC_URL, WORLDID_DB, LOOKOUT_DATA_DIR.
 
 import { installErrorScrubbing } from '@lookout/arkiv';
 installErrorScrubbing();
@@ -23,7 +22,6 @@ import { createArkivClients, safeMessage, type EntityWriter, type TrustWriter } 
 import { caseIdFor, targetHash } from '@lookout/core';
 import { createEscrow } from '@lookout/escrow';
 import { loadRegistry } from '@lookout/indexer';
-import { openMetaAddress, payerEncryptionPublicKey } from '@lookout/stealth';
 import { HUMAN_ACTION, SqliteSeatStore } from '@lookout/worldid';
 import { arkivEvidenceSource, arkivReportSource } from './adapters.ts';
 import { sqliteJournal } from './journal.ts';
@@ -44,10 +42,9 @@ const positional = process.argv.slice(2).filter((a, i, all) => !a.startsWith('--
 
 const need = (k: string): string => {
   const v = process.env[k];
-  if (!v) { console.error(`Missing ${k} in .env.${k.startsWith('PANEL_') ? ' Run: npm run operator:keys' : ''}`); process.exit(1); }
+  if (!v) { console.error(`Missing ${k} in .env`); process.exit(1); }
   return v;
 };
-const secret = (k: string) => Uint8Array.from(Buffer.from(need(k), 'hex'));
 
 const dataDir = process.env.LOOKOUT_DATA_DIR ?? join(homedir(), '.lookout');
 const journalPath = join(dataDir, 'operator', 'journal.sqlite');
@@ -61,8 +58,6 @@ const sepoliaPublic = createPublicClient({ chain: sepolia, transport });
 const escrowAddress = need('ESCROW_ADDRESS') as `0x${string}`;
 const escrow = createEscrow({ address: escrowAddress, publicClient: sepoliaPublic, walletClient: createWalletClient({ account, chain: sepolia, transport }) });
 
-const payerSecret = secret('PANEL_PAYER_SECRET');
-const encSecret = secret('PANEL_ENC_SECRET');
 const now = () => Math.floor(Date.now() / 1000);
 
 // the people World ID has bound to a wallet. Read fresh each time, so a new verification counts on the next pass.
@@ -74,7 +69,7 @@ const source = arkivReportSource(arkivPublic);
 const demo = has('--demo');
 
 const resolver = {
-  arkiv: writer as EntityWriter, escrow, journal, stealthPayerSecret: payerSecret, now, bountyTier: 1, humans,
+  arkiv: writer as EntityWriter, escrow, journal, now, humans,
   evidence: arkivEvidenceSource(arkivPublic, registry),
   // --demo shortens the wait for a source to corroborate a report, so a recording does not need a week. --window <seconds> sets it exactly
   ...(arg('--window') ? { windowSeconds: Number(arg('--window')) } : demo ? { windowSeconds: 600 } : {}),
@@ -82,10 +77,7 @@ const resolver = {
 
 const service = createOperatorService({
   journal, resolver, source,
-  planPorts: {
-    deposit: (reporter, reportId) => escrow.deposit(reporter, reportId),
-    openSealed: (blob, reportId) => { try { return openMetaAddress(blob, encSecret, reportId); } catch { return null; } },
-  },
+  planPorts: { deposit: (reporter, reportId) => escrow.deposit(reporter, reportId) },
   escrow, escrowFromBlock: BigInt(process.env.ESCROW_DEPLOY_BLOCK ?? 0), latestEscrowBlock: () => sepoliaPublic.getBlockNumber(),
   arkiv: writer as EntityWriter & TrustWriter, now, checkpointEverySeconds: demo ? 120 : 3600, humans,
 });
@@ -129,7 +121,7 @@ if (command === 'disputes') {
     const line = JSON.stringify({ mirrored: r.mirrored, resolved: r.resolved && { ...r.resolved, skipped: r.resolved.skipped.length }, disputes: r.disputes, checkpoint: r.checkpoint?.snapshotId, errors: r.errors });
     if (line !== last) { console.log(`[${new Date().toISOString()}] ${line}`); last = line; }
   };
-  console.log(`operator wallet ${account.address}, escrow ${escrowAddress}, ${demo ? 'DEMO timing (10 minute window)' : 'real timing'}, encryption key ${payerEncryptionPublicKey(encSecret)}`);
+  console.log(`operator wallet ${account.address}, escrow ${escrowAddress}, ${demo ? 'DEMO timing' : 'real timing'}`);
   if (has('--once')) {
     await pass();
     seats.close();

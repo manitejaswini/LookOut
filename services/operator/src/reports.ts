@@ -36,8 +36,6 @@ export interface AttestationRow {
 export interface PlanPorts {
   /** the escrow contract's view of this deposit */
   deposit(reporter: string, reportId: string): Promise<{ status: DepositStatus }>;
-  /** opens a sealed bounty address with the operator's key. Returns null if it cannot be opened */
-  openSealed(blob: Uint8Array, reportId: string): string | null;
 }
 
 export interface Skipped {
@@ -59,10 +57,9 @@ export async function planReports(rows: readonly ReportRow[], ports: PlanPorts):
       continue;
     }
     if (status !== 'locked') { skipped.push({ key: r.key, reason: `deposit is ${status}, not locked` }); continue; }
-    const reporterMeta = decoded.payload.sealed ? ports.openSealed(decoded.payload.sealed, r.reportId) ?? undefined : undefined;
     reports.push({
       key: r.key, reportId: r.reportId, reporter: r.creator.toLowerCase(), createdAt: r.createdAt, targetHash: r.targetHash.toLowerCase(),
-      kind: decoded.payload.kind, value: decoded.payload.target, ...(reporterMeta ? { reporterMeta } : {}),
+      kind: decoded.payload.kind, value: decoded.payload.target,
     });
   }
   return { reports, skipped };

@@ -5,7 +5,6 @@ import { parseEther } from 'viem';
 import { CONFIG, type Corroboration } from '@lookout/core';
 import { createEscrow, deployEscrow, type Escrow } from '@lookout/escrow';
 import { anvilAvailable, startLocalChain, type LocalChain } from '../../../packages/escrow/src/anvil.ts';
-import { bountyIdFor, generateKeys, metaAddress, parseMetaAddress, stealthAddressFor } from '@lookout/stealth';
 import { memoryJournal } from './journal.ts';
 import { allStatuses, resolveAll, type ResolverDeps } from './resolver.ts';
 import { applyResolution, rejectReport, ruleOnTarget, type ReportToResolve } from './settle.ts';
@@ -14,19 +13,19 @@ const skip = anvilAvailable() ? false : 'anvil (Foundry) is not installed';
 const DEPOSIT = parseEther('0.01');
 const BOUNTY = parseEther('0.005');
 const DAY = 86_400;
-const SECRET = new Uint8Array(32).fill(7);
 const T0 = 1_000_000;
 
 let chain: LocalChain;
 let address: `0x${string}`;
 const acct = (i: number) => chain.accounts[i];
-const as = (i: number): Escrow => createEscrow({ address, publicClient: chain.publicClient, walletClient: acct(i).wallet });
+const as = (i: number, at: `0x${string}` = address): Escrow => createEscrow({ address: at, publicClient: chain.publicClient, walletClient: acct(i).wallet });
 const rid = (n: number) => n.toString(16).padStart(32, '0');
+const deploy = async () => (await deployEscrow({ publicClient: chain.publicClient, walletClient: acct(0).wallet, resolver: acct(0).address, depositWei: DEPOSIT, bountyWei: BOUNTY, resolveWindow: 30n * BigInt(DAY) })).address;
 
 before(async () => {
   if (skip) return;
   chain = await startLocalChain();
-  ({ address } = await deployEscrow({ publicClient: chain.publicClient, walletClient: acct(0).wallet, resolver: acct(0).address, depositWei: DEPOSIT, bountyWei: BOUNTY, resolveWindow: 30n * BigInt(DAY) }));
+  address = await deploy();
   await as(0).fundPool(parseEther('1')); // the pool pays bounties
 });
 after(async () => { if (!skip) await chain.stop(); });
@@ -42,74 +41,74 @@ function recorder() {
   };
 }
 
-const deps = (rec: ReturnType<typeof recorder>, humans: string[] = [], journal = memoryJournal()) => ({
-  arkiv: rec.writer, escrow: as(0), journal, stealthPayerSecret: SECRET, now: () => T0 + 100, bountyTier: 2, humans: () => new Set(humans.map((h) => h.toLowerCase())),
+const deps = (rec: ReturnType<typeof recorder>, humans: string[] = [], journal = memoryJournal(), escrow: Escrow = as(0)) => ({
+  arkiv: rec.writer, escrow, journal, now: () => T0 + 100, humans: () => new Set(humans.map((h) => h.toLowerCase())),
 });
 
-function report(n: number, meta?: string): ReportToResolve {
-  return { key: `0x${n.toString(16).padStart(64, '0')}`, reportId: rid(n), reporter: acct(1).address.toLowerCase(), createdAt: T0, targetHash: '0x' + 'ab'.repeat(32), kind: 'domain', value: `evil-${n}.example`, reporterMeta: meta };
+function report(n: number): ReportToResolve {
+  return { key: `0x${n.toString(16).padStart(64, '0')}`, reportId: rid(n), reporter: acct(1).address.toLowerCase(), createdAt: T0, targetHash: '0x' + 'ab'.repeat(32), kind: 'domain', value: `evil-${n}.example` };
 }
-const lock = (n: number) => as(1).lockDeposit(rid(n));
+const lock = (n: number, escrow: Escrow = as(1)) => escrow.lockDeposit(rid(n));
 
-test('CONFIRM a verified human: deposit returned, a private bounty paid to an address only the reporter can find, reputation up', { skip }, async () => {
-  const keys = generateKeys();
-  const r = report(1, metaAddress(keys));
+test('CONFIRM a verified human: the deposit AND a bounty are credited to the reporter, in one step, and reputation goes up', { skip }, async () => {
+  const r = report(1);
   await lock(1);
-  const rec = recorder();
-  const out = await applyResolution(deps(rec, [r.reporter]), r, { action: 'confirm', evidence: [] });
+  const poolBefore = await as(0).bountyPool();
+  const out = await applyResolution(deps(recorder(), [r.reporter]), r, { action: 'confirm', evidence: [] });
   assert.equal(out.action, 'confirm');
   assert.equal(out.bounty, 'paid');
   assert.equal((await as(0).deposit(r.reporter, r.reportId)).status, 'returned');
-  assert.equal(await as(0).claimable(r.reporter), DEPOSIT);
+  assert.equal(await as(0).claimable(r.reporter), DEPOSIT + BOUNTY);
+  assert.equal(await as(0).bountyPool(), poolBefore - BOUNTY, 'the pool paid it');
   assert.deepEqual(out.repEvents.map((e) => e.kind), ['report_confirmed']);
-
-  // the reporter, with their own keys and the announced one-time key, finds exactly where the bounty went
-  const announced = rec.created[0].payload as Uint8Array;
-  const R = '0x' + Buffer.from(announced).toString('hex');
-  const stealth = stealthAddressFor(keys.viewingKey, parseMetaAddress(metaAddress(keys)).spendingPub, R);
-  assert.equal(await chain.publicClient.getBalance({ address: stealth as `0x${string}` }), BOUNTY);
-  assert.equal(await as(0).bountyPaid(bountyIdFor(SECRET, r.reportId)), true);
-  assert.notEqual(stealth.toLowerCase(), r.reporter, 'not the reporter wallet');
   const t = await as(0).totals();
   assert.equal(await as(0).balance(), t.locked + t.claimable + t.pool, 'the escrow still balances to the wei');
+  // and the reporter takes it all out with one claim, to the wallet that filed the report
+  const before = await chain.publicClient.getBalance({ address: acct(1).address });
+  await as(1).claim();
+  assert.ok((await chain.publicClient.getBalance({ address: acct(1).address }) - before) > DEPOSIT + BOUNTY - parseEther('0.001'));
 });
 
-test('CONFIRM a wallet that is NOT a verified human: deposit and reputation, but no bounty, so fresh wallets cannot farm rewards', { skip }, async () => {
-  const r = report(2, metaAddress(generateKeys()));
+test('CONFIRM a wallet that is NOT a verified human: the deposit and reputation, but no bounty, so fresh wallets cannot farm rewards', { skip }, async () => {
+  const r = report(2);
   await lock(2);
-  const rec = recorder();
   const poolBefore = await as(0).bountyPool();
-  const out = await applyResolution(deps(rec, []), r, { action: 'confirm', evidence: [] });
+  const out = await applyResolution(deps(recorder(), []), r, { action: 'confirm', evidence: [] });
   assert.equal(out.bounty, 'not-a-verified-human');
-  assert.equal((await as(0).deposit(r.reporter, r.reportId)).status, 'returned');
+  assert.equal(await as(0).claimable(r.reporter), DEPOSIT);
   assert.equal(await as(0).bountyPool(), poolBefore, 'the pool paid nothing');
-  assert.equal(rec.created.length, 0, 'no bounty announcement either');
   assert.equal(out.repEvents.length, 1);
+  await as(1).claim();
   // the rule can be switched off, and then the same report is paid
-  const r2 = report(3, metaAddress(generateKeys()));
+  const r2 = report(3);
   await lock(3);
   const out2 = await applyResolution({ ...deps(recorder(), []), bountyRequiresHuman: false }, r2, { action: 'confirm', evidence: [] });
   assert.equal(out2.bounty, 'paid');
   assert.equal(CONFIG.BOUNTY_REQUIRES_HUMAN, true, 'and the shipped default requires a human');
+  await as(1).claim();
 });
 
-test('CONFIRM with no bounty address attached: the deposit comes back, no bounty', { skip }, async () => {
+test('CONFIRM with an empty pool: the deposit still comes back, and the outcome says the bounty could not be paid', { skip }, async () => {
+  const empty = await deploy(); // a fresh escrow whose pool holds nothing
   const r = report(4);
-  await lock(4);
-  const out = await applyResolution(deps(recorder(), [r.reporter]), r, { action: 'confirm', evidence: [] });
-  assert.equal(out.bounty, 'no-bounty-address');
-  assert.equal((await as(0).deposit(r.reporter, r.reportId)).status, 'returned');
+  await lock(4, as(1, empty));
+  const out = await applyResolution(deps(recorder(), [r.reporter], memoryJournal(), as(0, empty)), r, { action: 'confirm', evidence: [] });
+  assert.equal(out.bounty, 'pool-empty');
+  assert.equal(await as(0, empty).claimable(r.reporter), DEPOSIT, 'the reporter is never left without their deposit');
+  assert.equal(await as(0, empty).bountyPool(), 0n);
 });
 
-test('REFUND: the deposit goes back with no bounty and NO reputation change, and it is not a confirmation', { skip }, async () => {
-  const r = report(5, metaAddress(generateKeys()));
+test('REFUND: the deposit goes back with no bounty and NO reputation change', { skip }, async () => {
+  const r = report(5);
   await lock(5);
-  const before = await as(0).bountyCounts();
+  const poolBefore = await as(0).bountyPool();
   const out = await applyResolution(deps(recorder(), [r.reporter]), r, { action: 'refund', reason: 'not-corroborated' });
   assert.equal(out.bounty, 'none');
   assert.deepEqual(out.repEvents, []);
   assert.equal((await as(0).deposit(r.reporter, r.reportId)).status, 'refunded');
-  assert.deepEqual(await as(0).bountyCounts(), before);
+  assert.equal(await as(0).claimable(r.reporter), DEPOSIT);
+  assert.equal(await as(0).bountyPool(), poolBefore);
+  await as(1).claim();
 });
 
 test('WAIT does nothing at all', { skip }, async () => {
@@ -121,18 +120,19 @@ test('WAIT does nothing at all', { skip }, async () => {
 });
 
 test('RETRY and CRASH RECOVERY: running again changes nothing and never pays a second bounty, even with the journal lost', { skip }, async () => {
-  const r = report(7, metaAddress(generateKeys()));
+  const r = report(7);
   await lock(7);
   const journal = memoryJournal();
-  const rec = recorder();
-  const first = await applyResolution(deps(rec, [r.reporter], journal), r, { action: 'confirm', evidence: [] });
-  assert.ok(first.did.length >= 2);
-  const second = await applyResolution(deps(rec, [r.reporter], journal), r, { action: 'confirm', evidence: [] });
+  const first = await applyResolution(deps(recorder(), [r.reporter], journal), r, { action: 'confirm', evidence: [] });
+  assert.equal(first.bounty, 'paid');
+  const second = await applyResolution(deps(recorder(), [r.reporter], journal), r, { action: 'confirm', evidence: [] });
   assert.deepEqual(second.did, []);
-  const poolAfterFirst = await as(0).bountyPool();
+  assert.equal(second.bounty, 'paid', 'the first run\'s outcome is what is reported');
+  const owed = await as(0).claimable(r.reporter);
   const lost = await applyResolution(deps(recorder(), [r.reporter], memoryJournal()), r, { action: 'confirm', evidence: [] });
-  assert.equal(lost.bounty, 'already-paid');
-  assert.equal(await as(0).bountyPool(), poolAfterFirst, 'the contract paid nothing more');
+  assert.equal(lost.bounty, 'already-settled');
+  assert.equal(await as(0).claimable(r.reporter), owed, 'the contract credited nothing more');
+  await as(1).claim();
 });
 
 test('REJECT is the only way a deposit is forfeited, and it goes to the pool, never to the operator', { skip }, async () => {
@@ -146,9 +146,8 @@ test('REJECT is the only way a deposit is forfeited, and it goes to the pool, ne
   assert.equal((await as(0).deposit(r.reporter, r.reportId)).status, 'slashed');
   assert.equal(await as(0).bountyPool(), poolBefore + DEPOSIT);
   assert.ok((await chain.publicClient.getBalance({ address: acct(0).address })) <= opBalance, 'the operator gained nothing (it only paid gas)');
-  // a second reject is a no-op
-  assert.deepEqual((await rejectReport({ escrow: as(0), journal: memoryJournal(), now: () => T0 }, r)).did, ['reject']);
-  assert.equal(await as(0).bountyPool(), poolBefore + DEPOSIT, 'and moved no money');
+  await rejectReport({ escrow: as(0), journal: memoryJournal(), now: () => T0 }, r);
+  assert.equal(await as(0).bountyPool(), poolBefore + DEPOSIT, 'a second reject moved no money');
 });
 
 test('RULING needs a reason, publishes it, and carries a stable case id', { skip }, async () => {
@@ -174,7 +173,7 @@ function resolver(rec: ReturnType<typeof recorder>, signals: () => Corroboration
 }
 
 test('PASS: a report waits, then a trusted source corroborates it and it is confirmed with a bounty', { skip }, async () => {
-  const r = report(20, metaAddress(generateKeys()));
+  const r = report(20);
   await lock(20);
   let flagged = false;
   let now = T0 + 60;
@@ -195,10 +194,11 @@ test('PASS: a report waits, then a trusted source corroborates it and it is conf
   assert.equal(second.repEvents.length, 1);
   assert.equal((await as(0).deposit(r.reporter, r.reportId)).status, 'returned');
   assert.equal(allStatuses(journal).find((s) => s.reportId === r.reportId)?.state, 'confirmed', 'the outcome is kept for the API');
+  await as(1).claim();
 });
 
 test('PASS: copying a target a source ALREADY flagged only gets the deposit back, and a late window refunds with nothing forfeited', { skip }, async () => {
-  const copy = report(21, metaAddress(generateKeys()));
+  const copy = report(21);
   await lock(21);
   const early = await resolveAll(resolver(recorder(), () => [signal({ createdAt: T0 - 500 })], [copy.reporter], () => T0 + 10), [copy]);
   assert.equal(early.statuses[0].state, 'refunded');
@@ -212,6 +212,7 @@ test('PASS: copying a target a source ALREADY flagged only gets the deposit back
   assert.equal(out.statuses[0].state, 'refunded');
   assert.equal(out.statuses[0].reason, 'not-corroborated');
   assert.equal((await as(0).deposit(lonely.reporter, lonely.reportId)).status, 'refunded', 'refunded, never forfeited');
+  await as(1).claim();
 });
 
 test('PASS: a source cannot confirm its own report, and one broken report does not stop the others', { skip }, async () => {

@@ -1,7 +1,6 @@
-import { createBounty, createRuling, type EntityWriter } from '@lookout/arkiv';
+import { createRuling, type EntityWriter } from '@lookout/arkiv';
 import { caseIdFor, CONFIG, repEventFromSettlement, type RepEvent, type Resolution, type TargetKind } from '@lookout/core';
 import type { Escrow } from '@lookout/escrow';
-import { bountyIdFor, createPayment, ephemeralFor } from '@lookout/stealth';
 import type { Journal } from './journal.ts';
 
 /**
@@ -9,20 +8,16 @@ import type { Journal } from './journal.ts';
  * an explicit operator command. Every step is written to the journal AFTER it succeeds, so a crash halfway is repaired by running
  * again, and the escrow contract refuses repeats as a second line of defence.
  *
- *  confirm   the escrow returns the deposit, reputation goes up, and a verified human is paid a private bounty
+ *  confirm   the escrow credits the deposit back, reputation goes up, and a verified human is also credited a bounty from the pool
  *  refund    the escrow returns the deposit, nothing else: no bounty, no reputation change
  *  reject    (operator only) the deposit is forfeited to the pool and reputation goes down twice as fast
  */
 
 export interface ResolveDeps {
   arkiv: EntityWriter;
-  escrow: Pick<Escrow, 'confirm' | 'refund' | 'reject' | 'payBounty' | 'bountyPaid' | 'deposit'>;
+  escrow: Pick<Escrow, 'confirm' | 'refund' | 'reject' | 'bountyPool' | 'deposit'>;
   journal: Journal;
-  /** derives each report's one-time bounty address and the opaque bounty id the escrow records */
-  stealthPayerSecret: Uint8Array;
   now: () => number;
-  /** the bounty tier published with the payout (0 to 255) */
-  bountyTier: number;
   /** wallets bound to a unique human (World ID) */
   humans: () => ReadonlySet<string>;
   /** only verified humans are paid a bounty (core/config.ts BOUNTY_REQUIRES_HUMAN) */
@@ -39,11 +34,10 @@ export interface ReportToResolve {
   targetHash: string;
   kind: TargetKind;
   value: string;
-  /** the reporter's stealth meta-address, opened from the sealed payload. Without it no bounty can be paid */
-  reporterMeta?: string;
 }
 
-export type BountyOutcome = 'paid' | 'not-a-verified-human' | 'no-bounty-address' | 'already-paid' | 'none';
+/** paid: the pool paid it. pool-empty: asked for, but the pool could not afford it (the deposit still came back) */
+export type BountyOutcome = 'paid' | 'pool-empty' | 'not-a-verified-human' | 'already-settled' | 'none';
 
 export interface Outcome {
   action: Resolution['action'] | 'reject';
@@ -66,31 +60,32 @@ export async function applyResolution(deps: ResolveDeps, r: ReportToResolve, res
   if (res.action === 'wait') return { action: 'wait', bounty: 'none', did, repEvents: [] };
   const step = stepper(deps.journal, r.key, did);
 
-  // the deposit: only if the contract still holds it locked (an earlier run may have settled it before crashing)
-  await step(res.action, async () => {
-    const d = await deps.escrow.deposit(r.reporter, r.reportId);
-    if (d.status !== 'locked') return `already ${d.status}`;
-    return (res.action === 'confirm' ? await deps.escrow.confirm(r.reporter, r.reportId) : await deps.escrow.refund(r.reporter, r.reportId)).hash;
-  });
-  if (res.action === 'refund') return { action: 'refund', bounty: 'none', did, repEvents: [] };
+  if (res.action === 'refund') {
+    await step('refund', async () => {
+      const d = await deps.escrow.deposit(r.reporter, r.reportId);
+      if (d.status !== 'locked') return `already ${d.status}`;
+      return (await deps.escrow.refund(r.reporter, r.reportId)).hash;
+    });
+    return { action: 'refund', bounty: 'none', did, repEvents: [] };
+  }
 
-  // the bounty: a confirmed report from a verified human, to a one-time address
-  let bounty: BountyOutcome = 'none';
+  // confirm: the deposit comes back, and a verified human is credited a bounty in the SAME transaction, so there is no second step
+  // that can fail halfway. The contract pays the bounty only if the pool can afford it, and the pool is read before and after.
   const needsHuman = deps.bountyRequiresHuman ?? CONFIG.BOUNTY_REQUIRES_HUMAN;
-  if (!r.reporterMeta) bounty = 'no-bounty-address';
-  else if (needsHuman && !deps.humans().has(r.reporter.toLowerCase())) bounty = 'not-a-verified-human';
-  else {
-    const bountyId = bountyIdFor(deps.stealthPayerSecret, r.reportId);
-    if (await deps.escrow.bountyPaid(bountyId)) bounty = 'already-paid';
-    else {
-      await step('bounty', async () => {
-        const pay = createPayment(r.reporterMeta!, ephemeralFor(deps.stealthPayerSecret, r.reportId));
-        // announce first: if the payment then fails, the announcement is harmless and a retry reuses the same address
-        await createBounty(deps.arkiv, { reportId: r.reportId, amountTier: deps.bountyTier, ephemeralPublicKey: pay.ephemeralPublicKey });
-        return (await deps.escrow.payBounty(bountyId, pay.stealthAddress)).hash;
-      });
-      bounty = 'paid';
-    }
+  const qualifies = !needsHuman || deps.humans().has(r.reporter.toLowerCase());
+  let bounty: BountyOutcome = qualifies ? 'pool-empty' : 'not-a-verified-human';
+  await step('confirm', async () => {
+    const d = await deps.escrow.deposit(r.reporter, r.reportId);
+    if (d.status !== 'locked') { bounty = 'already-settled'; return `already ${d.status}`; }
+    const before = await deps.escrow.bountyPool();
+    const tx = await deps.escrow.confirm(r.reporter, r.reportId, qualifies);
+    if (qualifies && (await deps.escrow.bountyPool()) < before) bounty = 'paid';
+    return `${tx.hash} bounty:${bounty}`;
+  });
+  // a retry finds the step already journaled: the outcome of the first run is what the journal says
+  if (!did.includes('confirm')) {
+    const recorded = deps.journal.detail(`${r.key}:confirm`) ?? '';
+    bounty = recorded.includes('bounty:paid') ? 'paid' : recorded.includes('bounty:pool-empty') ? 'pool-empty' : recorded.includes('bounty:not-a-verified-human') ? 'not-a-verified-human' : 'already-settled';
   }
 
   const rep = repEventFromSettlement('confirmed', r.reporter, r.reportId, deps.now());

@@ -16,7 +16,6 @@
     "@lookout/arkiv": "*",
     "@lookout/core": "*",
     "@lookout/escrow": "*",
-    "@lookout/stealth": "*",
     "@arkiv-network/sdk": "^1.0.1",
     "@lookout/indexer": "*",
     "@lookout/worldid": "*"
