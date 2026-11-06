@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // @lookout/core is shipped as TypeScript source from the workspace
-  transpilePackages: ['@lookout/core'],
+  // @lookout/core and @lookout/client are shipped as TypeScript source from the workspace
+  transpilePackages: ['@lookout/core', '@lookout/client'],
 };
 export default nextConfig;

@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { TARGETS, checkTarget, findTarget } from './mock';
+import { TARGETS, findTarget } from './mock';
+import { checkTarget } from './lookup';
 import { fmtAge } from './hooks';
 import { SNAPSHOT_ID } from '@lookout/core';
 import type { CheckResult } from '@lookout/core';
@@ -38,13 +39,17 @@ export default function Check() {
   const [result, setResult] = useState<CheckResult | null>(null);
   const [vec, setVec] = useState<{ a: number[]; b: number[] } | null>(null);
   const [signed, setSigned] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const runId = useRef(0);
   const timer = useRef<number>(0);
 
   useEffect(() => () => clearTimeout(timer.current), []);
 
   const run = (v = value) => {
     clearTimeout(timer.current);
+    const id = ++runId.current;
     setResult(null);
+    setError(null);
     setSigned(false);
     setStep(0);
     const a = randomBits();
@@ -56,7 +61,12 @@ export default function Check() {
       i++;
       setStep(i);
       if (i < STEPS.length) timer.current = window.setTimeout(tick, 380);
-      else setResult(checkTarget(v));
+      else {
+        checkTarget(v).then(
+          (r) => { if (id === runId.current) setResult(r); },
+          (e: Error) => { if (id === runId.current) setError(e.message); },
+        );
+      }
     };
     timer.current = window.setTimeout(tick, 380);
   };
@@ -119,6 +129,7 @@ export default function Check() {
             </div>
           )}
 
+          {error && <p className="tiny" role="alert">Lookup failed: {error}</p>}
           {result && <Verdict r={result} signed={signed} onSign={() => setSigned(true)} />}
         </div>
       </div>

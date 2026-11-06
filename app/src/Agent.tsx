@@ -1,20 +1,29 @@
 'use client';
 
 import { useState } from 'react';
-import { TARGETS, checkTarget } from './mock';
+import { TARGETS } from './mock';
+import { checkTarget } from './lookup';
+import type { CheckResult } from '@lookout/core';
 import type { TargetKind } from '@lookout/core';
 
 export default function Agent() {
   const [kind, setKind] = useState<TargetKind>('domain');
   const [value, setValue] = useState(TARGETS[0].value);
-  const [out, setOut] = useState<ReturnType<typeof checkTarget> | null>(null);
+  const [out, setOut] = useState<Partial<CheckResult> | null>(null);
+  const [err, setErr] = useState<string | null>(null);
 
-  const call = () => {
-    const r = checkTarget(value);
-    // the agent tool returns the same object as the wallet client, minus UI-only fields
-    const { headline: _h, typeScores: _t, strongTypes: _s, ...api } = r;
-    void _h; void _t; void _s;
-    setOut(api as ReturnType<typeof checkTarget>);
+  const call = async () => {
+    setErr(null);
+    try {
+      const r = await checkTarget(value, kind);
+      // the agent tool returns the same object as the wallet client, minus UI-only fields
+      const { headline: _h, typeScores: _t, strongTypes: _s, ...api } = r;
+      void _h; void _t; void _s;
+      setOut(api);
+    } catch (e) {
+      setOut(null);
+      setErr((e as Error).message);
+    }
   };
 
   const decision = !out
@@ -54,6 +63,7 @@ export default function Agent() {
   value: "${value}"
 })`}</code></pre>
           <button className="btn" onClick={call}>Run tool call</button>
+          {err && <p className="tiny" role="alert">Lookup failed: {err}</p>}
           {out && (
             <>
               <pre className="code out"><code>{JSON.stringify(out, null, 2)}</code></pre>
