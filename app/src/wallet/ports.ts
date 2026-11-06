@@ -18,6 +18,31 @@ import type { WalletState } from './WalletProvider';
  * has not been exercised end to end. Treat this file as the first thing to check in the live run.
  */
 
+
+/** The most useful single line out of a viem or SDK error, which usually wraps the real reason one or two levels down. */
+export function underlying(e: unknown): string {
+  const parts: string[] = [];
+  let cur: unknown = e;
+  for (let i = 0; i < 4 && cur; i++) {
+    const x = cur as { shortMessage?: string; details?: string; message?: string; cause?: unknown };
+    const line = (x.shortMessage ?? x.details ?? x.message ?? '').split('\n')[0].trim();
+    if (line && !parts.includes(line)) parts.push(line);
+    cur = x.cause;
+  }
+  return parts.join(' <- ');
+}
+
+/**
+ * Makes sure the wallet is really on the Arkiv network before anything is written there. The SDK reads the current block number
+ * through the wallet to work out the entity's expiry, so a wallet that is still on another chain produces a nonsense expiry and a
+ * failure that only says "execution error". Checking first turns that into a message a person can act on.
+ */
+async function onArkivChain(w: WalletState): Promise<void> {
+  await w.switchChain('arkiv');
+  const id = parseInt(String(await w.provider().request({ method: 'eth_chainId' })), 16);
+  if (id !== ARKIV_CHAIN.id) throw new Error(`Your wallet is on network ${id}, not Rabdi (${ARKIV_CHAIN.id}). Switch the network in your wallet, then press Retry.`);
+}
+
 const needAddress = (w: WalletState): `0x${string}` => {
   if (!w.address) throw new Error('connect your wallet first');
   return w.address;
@@ -42,7 +67,14 @@ export function reportPorts(w: WalletState): ReportPorts {
     post: async (input) => {
       // the payload carries the plain target, so the operator can act on the report (the entity itself only has its hash)
       const payload = encodeReportPayload({ kind: input.kind, value: input.value });
-      const out = await createReport(arkivClient(w) as unknown as EntityWriter, { kind: input.kind, value: input.value, category: input.category, reportId: input.reportId, payload });
+      await onArkivChain(w);
+      let out;
+      try {
+        out = await createReport(arkivClient(w) as unknown as EntityWriter, { kind: input.kind, value: input.value, category: input.category, reportId: input.reportId, payload });
+      } catch (e) {
+        console.error('Arkiv write failed', e);
+        throw new Error(`Posting to Arkiv failed: ${underlying(e)}`);
+      }
       rememberReport({ reportId: input.reportId, kind: input.kind, value: input.value, at: Math.floor(Date.now() / 1000) });
       return { entityKey: out.entityKey, expiresAt: String(out.expiresAt) };
     },
@@ -97,7 +129,14 @@ export function disputePorts(w: WalletState): DisputePorts {
     switchChain: () => w.switchChain('arkiv'),
     post: async ({ target, signature }) => {
       const bytes = Uint8Array.from((signature.slice(2).match(/../g) ?? []).map((h) => parseInt(h, 16)));
-      const out = await createAttestation(arkivClient(w) as unknown as EntityWriter, { kind: 'address', value: target, claim: 'legit', payload: bytes });
+      await onArkivChain(w);
+      let out;
+      try {
+        out = await createAttestation(arkivClient(w) as unknown as EntityWriter, { kind: 'address', value: target, claim: 'legit', payload: bytes });
+      } catch (e) {
+        console.error('Arkiv write failed', e);
+        throw new Error(`Posting the dispute to Arkiv failed: ${underlying(e)}`);
+      }
       return { entityKey: out.entityKey };
     },
   };

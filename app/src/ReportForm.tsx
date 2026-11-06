@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { TargetKind } from '@lookout/core';
 import { CATEGORIES, FlowError, runReportFlow, TARGET_KINDS, type Category, type ReportResult, type ReportStep, type Resume } from './flows/report-flow';
 import { escrowConfigured } from './wallet/chains';
@@ -19,6 +19,16 @@ const STEP_TEXT: Record<ReportStep, string> = {
   done: 'Done.',
 };
 
+/**
+ * A deposit that is locked but whose report was not posted yet. It is remembered in this browser, so a refresh or a closed tab
+ * cannot strand the deposit or make the person pay a second one: the form comes back ready to post the SAME report.
+ */
+const PENDING = 'lookout.pending-report.v0';
+interface Pending { reportId: string; depositTx: string; kind: TargetKind; value: string; category: Category }
+const loadPending = (): Pending | null => {
+  try { return JSON.parse(window.localStorage.getItem(PENDING) ?? 'null') as Pending | null; } catch { return null; }
+};
+
 export default function ReportForm({ initialKind, initialValue }: { initialKind?: TargetKind; initialValue?: string }) {
   const wallet = useWallet();
   const [kind, setKind] = useState<TargetKind>(initialKind ?? 'domain');
@@ -30,6 +40,13 @@ export default function ReportForm({ initialKind, initialValue }: { initialKind?
   const [done, setDone] = useState<ReportResult | null>(null);
   const [resume, setResume] = useState<Resume | null>(null);
 
+  useEffect(() => {
+    const p = loadPending();
+    if (!p || !/^[0-9a-f]{32}$/.test(p.reportId)) return;
+    setResume({ reportId: p.reportId, depositTx: p.depositTx });
+    setKind(p.kind); setValue(p.value); setCategory(p.category);
+  }, []);
+
   async function submit() {
     setBusy(true);
     setError(null);
@@ -38,11 +55,15 @@ export default function ReportForm({ initialKind, initialValue }: { initialKind?
       const r = await runReportFlow(reportPorts(wallet), { kind, value, category }, setStep, resume ?? undefined);
       setDone(r);
       setResume(null);
+      window.localStorage.removeItem(PENDING);
     } catch (e) {
       const fe = e instanceof FlowError ? e : new FlowError('post', e instanceof Error ? e.message : String(e));
       setError(fe);
       // the deposit went through but the report did not: keep the id so a retry does not pay twice
-      if (fe.depositLocked && fe.reportId && fe.depositTx) setResume({ reportId: fe.reportId, depositTx: fe.depositTx });
+      if (fe.depositLocked && fe.reportId && fe.depositTx) {
+        setResume({ reportId: fe.reportId, depositTx: fe.depositTx });
+        window.localStorage.setItem(PENDING, JSON.stringify({ reportId: fe.reportId, depositTx: fe.depositTx, kind, value, category } satisfies Pending));
+      }
     } finally {
       setBusy(false);
     }
