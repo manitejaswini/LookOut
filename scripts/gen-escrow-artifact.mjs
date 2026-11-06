@@ -26,7 +26,7 @@ export const escrowBytecode = '${bytecode}' as const;
 `;
 
 if (process.argv.includes('--check')) {
-  const current = readFileSync(out, 'utf8');
+  const current = readFileSync(out, 'utf8').split('\r\n').join('\n'); // git may check the file out with CRLF
   if (current !== text) { console.error('packages/escrow/src/artifact.ts is out of date. Run: npm run gen -w @lookout/escrow'); process.exit(1); }
   console.log('artifact is up to date');
 } else {
