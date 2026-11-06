@@ -148,3 +148,17 @@
 .crops-limit { border: 1px dashed var(--ink); background: var(--paper); padding: calc(var(--u) * 1) calc(var(--u) * 1.4); display: flex; flex-direction: column; gap: calc(var(--u) * 0.4); }
 .crops-limit p { font-size: calc(var(--u) * 1.15); line-height: 1.35; color: var(--navy); }
 @media (max-width: 900px) { .crops { grid-template-columns: 1fr; } .crops-mark { font-size: calc(var(--u) * 9); padding: 8px 0; } }
+
+/* ---------- PIR explainer slide ---------- */
+.pir { display: grid; grid-template-columns: 1fr auto 1.5fr auto 1fr; gap: calc(var(--u) * 1); align-items: stretch; }
+.pir-step { border: 1px solid var(--ink); background: var(--paper); padding: calc(var(--u) * 1.4); display: flex; flex-direction: column; gap: calc(var(--u) * 0.7); justify-content: center; }
+.pir-step h3 { font-size: calc(var(--u) * 2); font-weight: 400; letter-spacing: -0.02em; line-height: 1.1; }
+.pir-step p { font-size: calc(var(--u) * 1.15); line-height: 1.35; color: var(--navy); }
+.pir-arrow { align-self: center; font-size: calc(var(--u) * 2.6); }
+.pir-servers { background: var(--neon); }
+.pir-row { display: flex; flex-direction: column; gap: calc(var(--u) * 0.4); }
+.pir-bits { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; }
+.pir-bits span { aspect-ratio: 1; background: rgba(10, 10, 10, 0.12); }
+.pir-bits span.on { background: var(--ink); }
+.pir-bits span.flip { outline: 2px solid var(--red); outline-offset: 1px; }
+@media (max-width: 900px) { .pir { grid-template-columns: 1fr; } .pir-arrow { display: none; } }

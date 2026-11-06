@@ -92,7 +92,7 @@ function WorkflowSlide({ intro, steps, notes }: { intro: string; steps: P.Step[]
 function CropsSlide({ step, mark, name, statement, points, limit }: { step: number; mark: string; name: string; statement: string; points: string[]; limit: string }) {
   return (
     <>
-      <p className="mono-label">{`0${step + 2} · CROPS · ${step} of 4`}</p>
+      <p className="mono-label">{`0${step + 2 + (step === 4 ? 1 : 0)} · CROPS · ${step} of 4`}</p>
       <div className="crops">
         <div className="crops-mark" aria-hidden="true">{mark}</div>
         <div className="crops-body">
@@ -106,6 +106,57 @@ function CropsSlide({ step, mark, name, statement, points, limit }: { step: numb
             <p>{limit}</p>
           </div>
         </div>
+      </div>
+    </>
+  );
+}
+
+const PIR_A = '101100100110101001101100';
+const PIR_FLIP = 9;
+const pirBits = (flip: boolean) =>
+  PIR_A.split('').map((c, i) => (flip && i === PIR_FLIP ? (c === '1' ? '0' : '1') : c));
+
+function PirRow({ label, flip }: { label: string; flip: boolean }) {
+  return (
+    <div className="pir-row">
+      <span className="mono-label">{label}</span>
+      <div className="pir-bits" aria-hidden="true">
+        {pirBits(flip).map((b, i) => (
+          <span key={i} className={`${b === '1' ? 'on' : ''} ${i === PIR_FLIP ? 'flip' : ''}`} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PirSlide() {
+  return (
+    <>
+      <Title label="06 · Privacy explained">How PIR works.</Title>
+      <p className="s-lede">Ask two servers for one record. Neither learns which one.</p>
+      <div className="pir">
+        <div className="pir-step">
+          <span className="mono-label">01 · Client</span>
+          <h3>Picks a random vector</h3>
+          <p>One bit per bucket. It wants bucket <b>i</b>.</p>
+        </div>
+        <span className="pir-arrow" aria-hidden="true">→</span>
+        <div className="pir-step pir-servers">
+          <span className="mono-label">02 · Two servers</span>
+          <PirRow label="Server A gets r" flip={false} />
+          <PirRow label="Server B gets r, bit i flipped" flip />
+          <p>Each sends back the XOR of the buckets its vector selects.</p>
+        </div>
+        <span className="pir-arrow" aria-hidden="true">→</span>
+        <div className="pir-step">
+          <span className="mono-label">03 · Client</span>
+          <h3>XORs the answers</h3>
+          <p>Everything cancels except bucket <b>i</b>. Then it checks the bucket against the root on Arkiv.</p>
+        </div>
+      </div>
+      <div className="wf-notes">
+        <p>Each server sees one random-looking string, never the target. We always fetch two candidate buckets, so a hit and a miss look the same.</p>
+        <p>Honest limit: the two servers must not collude, and they still see your IP address.</p>
       </div>
     </>
   );
@@ -199,15 +250,19 @@ const EF_SLIDES: SlideDef[] = [
     id: 'e-workflow',
     render: () => <WorkflowSlide intro={E.intro} steps={E.workflow} notes={E.notes} />,
   },
-  ...E.cropsSlides.map(([mark, name, statement, points, limit], n): SlideDef => ({
-    id: `e-crops-${mark}`,
-    render: () => <CropsSlide step={n + 1} mark={mark} name={name} statement={statement} points={points} limit={limit} />,
-  })),
+  ...E.cropsSlides.flatMap(([mark, name, statement, points, limit], n): SlideDef[] => {
+    const slide: SlideDef = {
+      id: `e-crops-${mark}`,
+      render: () => <CropsSlide step={n + 1} mark={mark} name={name} statement={statement} points={points} limit={limit} />,
+    };
+    // the PIR explainer sits right after the Privacy slide
+    return mark === 'P' ? [slide, { id: 'e-pir', render: () => <PirSlide /> }] : [slide];
+  }),
   {
     id: 'e-stack',
     render: () => (
       <>
-        <Title label="07 · Privacy stack">{E.stackTitle}</Title>
+        <Title label="08 · Privacy stack">{E.stackTitle}</Title>
         <div className="cols2 even">
           <div>
             <p className="mono-label">The privacy stack, including Anon-RPC</p>
