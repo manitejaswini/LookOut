@@ -4,9 +4,32 @@ Source of truth for scope is `Lookout PRD (ETHGlobal Mumbai 2026).md`. This file
 
 **Scope: everything.** Time is not a constraint, so there is no cut list. Every requirement in the PRD (F1 to F14), including the stealth bounty, Anon-RPC and EIP-8141 items, is in scope and has an owner. The only exception is a dependency we cannot control (for example, a network that does not support Anon-RPC yet). Then we verify it, document the result honestly and build the closest thing that works.
 
-**Status now:** the Next.js frontend (`/app`) is built against mock data. Scoring logic exists as a pure function in `app/src/scoring.ts`. Everything else (Arkiv, indexer, PIR, contracts, checker, agent tool, stealth bounties) is still to build.
+**Status now (updated):**
+- **Done:** the Next.js frontend (`/app`) on mock data, and three pitch decks (`/pitch/arkiv`, `/pitch/ef`, `/pitch/worldid`). The npm workspace is set up. `@lookout/core` holds the types, config, scoring and target hashing (with tests). `arkiv/schema.md` v0.1 is written against the Arkiv docs. All of this is on branch `a/core-and-schema` (PR #2) and is not merged into `main` yet.
+- **Not started:** Arkiv writers, the indexer, PIR, contracts, the checker, the agent tool, stealth bounties, World ID.
 
-Names: **Dev A** and **Dev B**. Decide who is who.
+**Who is who:**
+- **Dev A: Rohit** (GitHub: Rohitamalraj).
+- **Dev B: the other developer** (name to be added here).
+
+## Next tasks, per developer
+
+**Dev A, in order**
+1. [ ] `arkiv/snapshot-format.md` (Dev B's PIR work depends on it).
+2. [ ] Install `@arkiv-network/sdk` and assert the schema's limits against the real SDK constants.
+3. [ ] Writers for `report`, `verdict` and `attestation` (needs an Arkiv access key and a funded tGLM wallet).
+4. [ ] Indexer v1: Arkiv into SQLite, target to signals, plus the temporary `/lookup` endpoint.
+5. [ ] Wire `scoreTarget` to the indexer output.
+
+**Dev B, can start now (no waiting on Dev A)**
+1. [ ] `arkiv/stealth-format.md` (Phase 0 contract).
+2. [ ] Scoring test table in `packages/core`: one type, two types, proof, ruling, dispute, and the 1,000-fresh-wallets case that must never exceed warn.
+3. [ ] `packages/client`: `checkTarget()` with the PRD response shape, built against mock data first.
+4. [ ] PIR servers and client on **synthetic** buckets (random vector, XOR, always fetch both candidate buckets, tamper test).
+
+**Dev B, after Dev A's writers and indexer exist:** point the demo UI at real Arkiv data, then the agent tool and the real attack script.
+
+**Shared, needed first:** merge PR #2 into `main` so both of you build on the workspace layout. Get an Arkiv access key and a funded test wallet (`hub.arkiv.network`). Decide the escrow chain (assumed: an Ethereum testnet such as Sepolia, since Arkiv's testnet is a separate chain with its own gas token).
 
 ## Split in one table
 
@@ -156,6 +179,20 @@ The EF prize is judged on privacy shown at the moment of lookup. This section pu
 **Verify before promising on stage:** Anon-RPC network support, EIP-8141 devnet availability, and whether Arkiv testnet accepts funding from our escrow chain. The PRD marks each as unverified.
 
 **Honest limits to state:** two-server PIR assumes the servers do not collude. Arkiv attributes are plaintext. Reputation ties reports to a wallet, so reporters can hide payouts but not earned reputation. The first reviewer panel is seeded by the team.
+
+## World ID integration (Best Use of IDKit track)
+
+The pitch is at `/pitch/worldid`. The integration is **not built yet**, and the track requires a working one. The product event: a staked wallet asks to join the reviewer panel, and World ID proves it is one unique human, so one person gets one seat. Credential: Proof of Human (see the pitch for why it is the minimum sufficient one).
+
+| # | Task | Owner | Done when |
+| --- | --- | --- | --- |
+| WID1 | Check the IDKit docs for the current setup: app and action ids, the exact credential names, and how a proof is verified | A | A short note in the PR with the findings |
+| WID2 | "Join the panel" screen in the app using IDKit's request widget and the Proof of Human credential | B | A user can start and complete a verification in the app |
+| WID3 | Server-side proof verification in the panel service, storing only the nullifier, one seat per human | A | A valid proof grants a seat, and a second wallet from the same human is rejected |
+| WID4 | The alternative paths: user cancels, no credential, already enrolled | B | Each shows a clear message and the person can still file reports |
+| WID5 | Pitch debrief: time to first success, friction, missing capability or docs, the one highest-impact improvement | both | The "Fill after build" rows on the last World ID slide are filled with real numbers |
+
+Do not claim any of this in the pitch until it runs. The last World ID slide already says it is not built.
 
 ## Definition of done (whole project)
 
