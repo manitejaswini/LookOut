@@ -21,6 +21,8 @@ type Stage = 'form' | 'checking' | 'review' | 'sending' | 'sent';
 const TITLE = { block: 'Flagged as a scam', warn: 'Warning: reported as suspicious', unknown: 'No reports found', failed: 'Could not check this address' } as const;
 const kindOf = (r: Review) => (r.check ? r.check.verdict : 'failed');
 const explorer = (hash: string) => `https://sepolia.etherscan.io/tx/${hash}`;
+/** Each flag is a public Arkiv record. This opens it on the Rabdi explorer, so anyone can see who wrote it and when. */
+const ARKIV_EXPLORER = 'https://rabdi.explorer.arkiv.network';
 
 export default function PayPage() {
   const wallet = useWallet();
@@ -121,7 +123,7 @@ export default function PayPage() {
                     <span className="mono-label">{x.sourceType}</span>
                     <span>{x.sourceId}</span>
                     <span className="mono-label">{x.level} · {fmtAge(x.ageSeconds)}</span>
-                    <span className="mono-label ent">{x.entityId}</span>
+                    <a className="mono-label ent" href={`${ARKIV_EXPLORER}/entity/${x.entityId}`} target="_blank" rel="noreferrer" title="Open this record on the Arkiv explorer">{x.entityId}</a>
                   </li>
                 ))}
               </ul>
@@ -129,7 +131,7 @@ export default function PayPage() {
           )}
           {review.check && (
             <p className="tiny">
-              Verification: this answer came from table <b>{review.check.snapshotId}</b>, {review.check.verified ? 'whose root matches the one published on Arkiv by a registered indexer. Each entity above is a public Arkiv record you can look up.' : 'but its root could not be compared with Arkiv, so treat it as unconfirmed.'}
+              Verification: this answer came from table <b>{review.check.snapshotId}</b>, {review.check.verified ? 'whose root matches the one published on Arkiv by a registered indexer. Each record id above opens that public Arkiv record on the explorer, where you can see who wrote it and when.' : 'but its root could not be compared with Arkiv, so treat it as unconfirmed.'}
               {' '}Lookout reports what was found. It never says an address is safe.
             </p>
           )}
