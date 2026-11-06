@@ -162,3 +162,20 @@
 .pir-bits span.on { background: var(--ink); }
 .pir-bits span.flip { outline: 2px solid var(--red); outline-offset: 1px; }
 @media (max-width: 900px) { .pir { grid-template-columns: 1fr; } .pir-arrow { display: none; } }
+
+/* ---------- World ID deck ---------- */
+.vs { display: flex; flex-direction: column; gap: calc(var(--u) * 1.2); }
+.vs-card { border: 1px solid var(--ink); background: var(--paper); padding: calc(var(--u) * 1.6); display: flex; flex-direction: column; gap: calc(var(--u) * 0.7); }
+.vs-card p { font-size: calc(var(--u) * 1.5); line-height: 1.3; letter-spacing: -0.01em; }
+.vs-bad { border-color: var(--red); background: #fff1ed; }
+.vs-good { background: var(--neon); }
+.choice td { vertical-align: top; }
+.choice tr.chosen td { background: #f7ffcc; }
+.verdict-tile.o-ok { background: var(--neon); }
+.verdict-tile.o-warn { background: var(--gold); }
+.verdict-tile.o-block { background: var(--red); border-color: var(--red); color: #fff; }
+.choice td { font-size: calc(var(--u) * 1.5); padding: calc(var(--u) * 1.4) calc(var(--u) * 1.2); line-height: 1.3; }
+.choice th { padding: calc(var(--u) * 1) calc(var(--u) * 1.2); }
+.choice td.dim { color: var(--navy); }
+.choice .kind { font-size: max(10px, calc(var(--u) * 1)); }
+.choice .kind { white-space: nowrap; }

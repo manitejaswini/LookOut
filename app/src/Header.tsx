@@ -11,6 +11,7 @@ const NAV: [string, string][] = [
   ['/#how', 'How it works'],
   ['/pitch/arkiv', 'Arkiv pitch'],
   ['/pitch/ef', 'EF pitch'],
+  ['/pitch/worldid', 'World ID pitch'],
 ];
 
 export default function Header() {

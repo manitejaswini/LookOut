@@ -1,8 +1,9 @@
 import type { ReactNode } from 'react';
 import PixelCanvas from './PixelCanvas';
 import * as P from './pitch-data';
+import { WORLDID } from './pitch-worldid';
 
-export type Track = 'arkiv' | 'ef';
+export type Track = 'arkiv' | 'ef' | 'worldid';
 export interface SlideDef { id: string; render: (active: boolean) => ReactNode; cover?: boolean }
 
 /* ---------- shared building blocks ---------- */
@@ -279,7 +280,100 @@ const EF_SLIDES: SlideDef[] = [
   },
 ];
 
+/* ---------- WORLD ID deck ---------- */
+
+const W = WORLDID;
+
+const WORLD_SLIDES: SlideDef[] = [
+  {
+    id: 'w-cover', cover: true,
+    render: (active) => <Cover {...W.cover} active={active} wave="wave" />,
+  },
+  {
+    id: 'w-trust',
+    render: () => (
+      <>
+        <Title label="01 · The trust moment">{W.trustTitle}</Title>
+        <div className="cols2">
+          <Rows items={W.trust} />
+          <div className="vs">
+            <div className="vs-card vs-bad"><span className="mono-label">{W.without[0]}</span><p>{W.without[1]}</p></div>
+            <div className="vs-card vs-good"><span className="mono-label">{W.with[0]}</span><p>{W.with[1]}</p></div>
+          </div>
+        </div>
+      </>
+    ),
+  },
+  {
+    id: 'w-choice',
+    render: () => (
+      <>
+        <Title label="02 · Which credential">{W.choiceTitle}</Title>
+        <table className="ent-table slide-table choice">
+          <thead><tr><th>Credential</th><th>What it proves</th><th>Here</th><th>Why</th></tr></thead>
+          <tbody>
+            {W.choices.map(([name, proves, verdict, why]) => (
+              <tr key={name} className={verdict === 'Chosen' ? 'chosen' : ''}>
+                <td><b>{name}</b></td>
+                <td>{proves}</td>
+                <td><span className={`kind ${verdict === 'Chosen' ? 'k-attestation' : ''}`}>{verdict}</span></td>
+                <td className="dim">{why}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </>
+    ),
+  },
+  {
+    id: 'w-flow',
+    render: () => (
+      <>
+        <Title label="03 · The flow">{W.flowTitle}</Title>
+        <div className="workflow" aria-label="Reviewer enrollment flow">
+          {W.flow.map(([title, caption], n) => (
+            <div key={title} className="wf-step">
+              <div className={`wf-node ${n === 1 ? 't-ef' : ''}`}>
+                <span className="mono-label">0{n + 1}</span>
+                <h3>{title}</h3>
+                <p>{caption}</p>
+                {n === 1 && <span className="tag">World ID</span>}
+              </div>
+              {n < W.flow.length - 1 && <span className="wf-arrow" aria-hidden="true">→</span>}
+            </div>
+          ))}
+        </div>
+        <div className="trio">
+          {W.outcomes.map(([title, body, tone]) => (
+            <div key={title} className={`verdict-tile o-${tone}`}><b>{title}</b><span>{body}</span></div>
+          ))}
+        </div>
+      </>
+    ),
+  },
+  {
+    id: 'w-status',
+    render: () => (
+      <>
+        <Title label="04 · Debrief and status">{W.statusTitle}</Title>
+        <div className="cols2 even">
+          <div>
+            <p className="mono-label">{W.debriefLabel}</p>
+            <Rows items={W.debrief} />
+          </div>
+          <div>
+            <p className="mono-label">{W.statusLabel}</p>
+            <Rows items={W.status} />
+          </div>
+        </div>
+        <Banner line={W.line} sub={W.lineSub} small={W.limits} />
+      </>
+    ),
+  },
+];
+
 export const SLIDE_SETS: Record<Track, { name: string; slides: SlideDef[] }> = {
   arkiv: { name: 'LOOKOUT · ARKIV', slides: ARKIV_SLIDES },
   ef: { name: 'LOOKOUT · EF', slides: EF_SLIDES },
+  worldid: { name: 'LOOKOUT · WORLD ID', slides: WORLD_SLIDES },
 };
