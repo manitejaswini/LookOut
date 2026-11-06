@@ -24,16 +24,25 @@ const manualRoots = process.env.NEXT_PUBLIC_PIR_ROOTS?.split(',').map((r) => r.t
 const verifyOff = process.env.NEXT_PUBLIC_PIR_VERIFY === 'off';
 const indexerUrl = process.env.NEXT_PUBLIC_INDEXER_URL;
 const trusted = JSON.parse(process.env.NEXT_PUBLIC_TRUSTED_INDEXERS ?? '[]') as TrustedIndexer[];
+/** Source ids from services/indexer/registry.json, in order, so a verdict can say "lookout-checker" and not "source #2". */
+const sourceNames = JSON.parse(process.env.NEXT_PUBLIC_SOURCES ?? '[]') as string[];
 
-/** Reads Arkiv without an access key (the public RPC is rate limited). A key would also identify this visitor to Arkiv. */
+/**
+ * Reads Arkiv without an access key by default: a key would identify this visitor to Arkiv. The catch is that Arkiv gives keyless
+ * queries only a small shared budget (it answers ANON_COST_LIMITED when it is used up), and then the lookup is withheld, not faked.
+ * For a demo that must not stall, set NEXT_PUBLIC_ARKIV_READ_KEY to a SEPARATE read-only key locked to this site. It is public in the
+ * browser bundle by design, so never reuse a key that can do anything else. Off by default.
+ */
+const arkivReadKey = process.env.NEXT_PUBLIC_ARKIV_READ_KEY ?? '';
+
 function publishedRoots() {
   if (verifyOff) return undefined;
   if (manualRoots?.length) return async () => manualRoots;
   if (trusted.length === 0) return undefined;
-  return arkivRootsSource({ publicClient: createPublicClient({ chain: rabdi({ accessKey: '' }), transport: http() }), trusted });
+  return arkivRootsSource({ publicClient: createPublicClient({ chain: rabdi({ accessKey: arkivReadKey }), transport: http(undefined, { timeout: 10_000, retryCount: 1 }) }), trusted });
 }
 
-const pirClient = pirA && pirB ? createPirClient({ pairs: [{ a: pirA, b: pirB }], publishedRoots: publishedRoots() }) : null;
+const pirClient = pirA && pirB ? createPirClient({ pairs: [{ a: pirA, b: pirB }], publishedRoots: publishedRoots(), sourceNames }) : null;
 const live = pirClient ?? (indexerUrl ? createClient({ indexerUrl }) : null);
 
 /** Base URL of Dev A's indexer, if configured. The explorer reads public Arkiv entities from it. */
