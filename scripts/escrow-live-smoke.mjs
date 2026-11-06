@@ -16,7 +16,7 @@ const walletClient = createWalletClient({ account, chain: sepolia, transport });
 const e = createEscrow({ address: ESCROW_ADDRESS, publicClient, walletClient });
 
 const c = await e.config();
-console.log('config:', { resolver: c.resolver, deposit: formatEther(c.depositWei), bounty: formatEther(c.bountyWei), minStake: formatEther(c.minReviewerStake), unstakeDays: Number(c.unstakeDelay) / 86400, reclaimDays: Number(c.resolveWindow) / 86400 });
+console.log('config:', { resolver: c.resolver, deposit: formatEther(c.depositWei), bounty: formatEther(c.bountyWei), reclaimDays: Number(c.resolveWindow) / 86400 });
 
 const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
 const dep = await e.lockDeposit(id);
@@ -28,4 +28,4 @@ console.log('confirmed, tx', conf.hash, 'status', (await e.deposit(account.addre
 const cl = await e.claim();
 console.log('claimed, tx', cl.hash);
 const t = await e.totals();
-console.log('escrow balance', formatEther(await e.balance()), 'owed', formatEther(t.locked + t.staked + t.claimable + t.pool));
+console.log('escrow balance', formatEther(await e.balance()), 'owed', formatEther(t.locked + t.claimable + t.pool));

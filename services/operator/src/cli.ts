@@ -40,7 +40,7 @@ const arg = (flag: string, fallback?: string) => {
   return i > -1 ? process.argv[i + 1] : fallback;
 };
 const has = (flag: string) => process.argv.includes(flag);
-const positional = process.argv.slice(2).filter((a, i, all) => !a.startsWith('--') && !(i > 0 && all[i - 1].startsWith('--') && ['--every', '--port'].includes(all[i - 1])));
+const positional = process.argv.slice(2).filter((a, i, all) => !a.startsWith('--') && !(i > 0 && all[i - 1].startsWith('--') && ['--every', '--port', '--window'].includes(all[i - 1])));
 
 const need = (k: string): string => {
   const v = process.env[k];
@@ -76,8 +76,8 @@ const demo = has('--demo');
 const resolver = {
   arkiv: writer as EntityWriter, escrow, journal, stealthPayerSecret: payerSecret, now, bountyTier: 1, humans,
   evidence: arkivEvidenceSource(arkivPublic, registry),
-  // --demo shortens the wait for a source to corroborate a report, so a recording does not need a week
-  ...(demo ? { windowSeconds: 600 } : {}),
+  // --demo shortens the wait for a source to corroborate a report, so a recording does not need a week. --window <seconds> sets it exactly
+  ...(arg('--window') ? { windowSeconds: Number(arg('--window')) } : demo ? { windowSeconds: 600 } : {}),
 };
 
 const service = createOperatorService({

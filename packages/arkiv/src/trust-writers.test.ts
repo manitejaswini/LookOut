@@ -35,7 +35,6 @@ const CASE_ID = '0123456789abcdef';
 const TX = `0x${'12'.repeat(32)}`;
 const KEY = `0x${'ef'.repeat(32)}`;
 const JUROR = '0x37324a0cc17959ee99233c8552e741519983573e';
-const SALT = 'ab'.repeat(16);
 
 /* ---------- stake ---------- */
 

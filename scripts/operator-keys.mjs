@@ -1,6 +1,6 @@
-// Creates the panel's two secrets once and stores them in .env. Never prints a secret.
+// Creates the operator's two secrets once and stores them in .env. Never prints a secret.
 //   PANEL_PAYER_SECRET  derives each report's one-time bounty address and the opaque bounty id the escrow records
-//   PANEL_ENC_SECRET    opens the sealed bounty address a reporter attaches to a report
+//   PANEL_ENC_SECRET    (the operator's encryption key) opens the sealed bounty address a reporter attaches to a report
 // The PUBLIC half of the encryption key is written to app/.env.local as NEXT_PUBLIC_PAYER_ENC_KEY, so the report form can seal to it.
 //
 //   node scripts/panel-keys.mjs
