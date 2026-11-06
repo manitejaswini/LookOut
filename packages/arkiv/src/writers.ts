@@ -1,4 +1,3 @@
-import { randomBytes } from 'node:crypto';
 import { normalizeTarget, targetHash, type TargetKind } from '@lookout/core';
 import { CREATION_FLAGS, LIFETIMES, VERDICT_REFRESH } from './lifetimes.ts';
 import { ENUMS } from './kinds.ts';
@@ -88,6 +87,9 @@ export async function createSnapshot(client: EntityWriter, input: SnapshotInput)
 
 /* ---------- report ---------- */
 
+/** 128 random bits as 32 hex digits. Web Crypto, so the same code runs in the browser and in Node. */
+export const newReportId = (): string => Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
+
 export interface ReportInput {
   kind: TargetKind;
   value: string;
@@ -101,7 +103,7 @@ export interface ReportInput {
 export async function createReport(client: EntityWriter, input: ReportInput): Promise<WriteResult & { reportId: string; targetHash: string }> {
   const { hash } = target(input.kind, input.value);
   oneOf('category', input.category, ENUMS.category);
-  const reportId = input.reportId ?? randomBytes(16).toString('hex');
+  const reportId = input.reportId ?? newReportId();
   if (!REPORT_ID.test(reportId)) throw new Error('reportId must be 32 lowercase hex digits');
 
   const out = await client.createEntity(

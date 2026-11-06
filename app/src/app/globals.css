@@ -238,3 +238,12 @@ footer { margin-top: 40px; }
 .why-list { list-style: none; margin: 28px 0 0; padding: 0; border-top: 1px solid var(--line); max-width: 44ch; }
 .why-list li { padding: 14px 0; border-bottom: 1px solid var(--line); font-size: 14px; line-height: 1.45; color: var(--navy); }
 .why-list b { color: var(--ink); font-weight: 500; }
+
+/* wallet connect + select + vote choice */
+.connect { font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; text-decoration: none; color: var(--ink); background: var(--neon); border: 1px solid var(--ink); padding: 7px 12px; cursor: pointer; }
+.connect:hover { background: var(--ink); color: var(--neon); }
+.connect-on { background: transparent; text-transform: none; letter-spacing: 0.04em; font-size: 11px; }
+.connect-idle { display: inline-block; width: 120px; height: 28px; border: 1px dashed var(--line); }
+.select { flex: 1; min-width: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 0; background: #fff; font: 13px var(--mono); color: var(--ink); }
+.vote-choice { border: 1px solid var(--line); margin: 14px 0 6px; padding: 10px 14px; display: grid; gap: 8px; font: 13px var(--mono); }
+.vote-choice legend { padding: 0 6px; }
