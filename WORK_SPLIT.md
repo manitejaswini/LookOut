@@ -22,7 +22,10 @@ Source of truth for scope is `Lookout PRD (ETHGlobal Mumbai 2026).md`. This file
 4. [x] Indexer v1 in `services/indexer`: Arkiv into SQLite, trusted-writer rules, target to signals, snapshot builder, and the temporary plain `/lookup` endpoint. 52 tests, and verified live on Rabdi (`npm run indexer:sync`).
 5. [x] Wire `scoreTarget` to the indexer output. Done: a real block verdict comes from real Arkiv entities. `scoreTarget` now takes just the scoring fields (`ScoringInput`).
 6. [ ] **Decide how indexers agree on one snapshot** (open question 4 in `arkiv/snapshot-format.md`). Different sync blocks currently give different roots from the same data.
-7. [ ] Checker (re-checkable proof for the drainer bytecode pattern) and the open-feed importer (F5, F6). These produce the verdicts the indexer reads.
+7. [x] Checker (F6) in `services/workers`: redirect-to-flagged-destination and exact known-drainer-bytecode proof, with an SSRF-guarded fetcher. 44 tests, and verified live (real HTTPS fetch, live-DNS SSRF refusal, real Sepolia bytecode, and a dry-run finding).
+7b. [ ] **Fill the checker's lists with real, cited entries.** `lists/drainers.json` and `lists/flagged.json` ship empty on purpose: every entry needs a real `source`, and hashes must not be invented. Until then only destinations Lookout already blocks count as flagged.
+7c. [ ] Open-feed importer (F5): load at least one license-compatible open scam list as `verdict` entities (needs a registered `feed` source and a license check first).
+7d. [ ] Run the checker on a schedule against new reports, refreshing verdicts while the finding holds.
 8. [ ] Escrow contract, reputation checkpoint job, and the reviewer panel service (Phase 3).
 
 **Dev B, can start now (no waiting on Dev A)**

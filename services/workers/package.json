@@ -1,0 +1,27 @@
+{
+  "name": "@lookout/workers",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "node --test src/",
+    "typecheck": "tsc --noEmit",
+    "check": "node src/checker/cli.ts"
+  },
+  "dependencies": {
+    "@lookout/arkiv": "*",
+    "@lookout/core": "*",
+    "@lookout/indexer": "*",
+    "@noble/hashes": "^2.4.0",
+    "@arkiv-network/sdk": "^1.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  }
+}

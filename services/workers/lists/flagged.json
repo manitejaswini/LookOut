@@ -1,0 +1,5 @@
+{
+  "_comment": "Destinations known to be bad, for the redirect check. EVERY entry needs a 'source' saying who says so. An unsourced entry is refused at load time. Empty on purpose: add entries only with a real source.",
+  "domains": [],
+  "addresses": []
+}

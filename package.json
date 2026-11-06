@@ -9,13 +9,14 @@
   "scripts": {
     "dev": "npm run dev -w app",
     "build": "npm run build -w app",
-    "test": "npm test -w @lookout/core -w @lookout/arkiv -w @lookout/indexer",
-    "typecheck": "npm run typecheck -w @lookout/core -w @lookout/arkiv -w @lookout/indexer",
+    "test": "npm test -w @lookout/core -w @lookout/arkiv -w @lookout/indexer -w @lookout/workers",
+    "typecheck": "npm run typecheck -w @lookout/core -w @lookout/arkiv -w @lookout/indexer -w @lookout/workers",
     "wallet:new": "node scripts/new-wallet.mjs",
     "arkiv:check": "node scripts/check-arkiv.mjs",
     "arkiv:smoke": "node scripts/arkiv-smoke.mjs",
     "arkiv:demo": "node scripts/arkiv-demo.mjs",
     "indexer:sync": "npm run sync -w @lookout/indexer",
-    "indexer:serve": "npm run serve -w @lookout/indexer"
+    "indexer:serve": "npm run serve -w @lookout/indexer",
+    "check": "npm run check -w @lookout/workers --"
   }
 }
