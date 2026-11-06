@@ -65,7 +65,7 @@ const targets = new Map<string, TargetView>([
   view('owner-disputes.app', [acc('community', 0, 0.2, 9, 'warn')], { disputed: true }),
   view('panel-cleared.org', [acc('community', 0, 1, 50)], { ruling: 'clear' }),
 ]);
-const state: IndexState = { targets, dropped: [], timing, entityCount: 7, syncedAt: 0 };
+const state: IndexState = { targets, dropped: [], entities: [], timing, entityCount: 7, syncedAt: 0 };
 const real = buildStoreSnapshot(targets, timing);
 const realWorld = await serve(real);
 const realClient = createPirClient({ pairs: [{ a: realWorld.a, b: realWorld.b }], publishedRoots: async () => [real.root] });
