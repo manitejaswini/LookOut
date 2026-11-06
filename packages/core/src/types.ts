@@ -12,15 +12,20 @@ export interface Signal {
   note: string;
 }
 
-export interface Target {
-  kind: TargetKind;
-  value: string;
-  title: string;
-  blurb: string; // what the mock wallet screen says the user is doing
+/** Everything the scoring rule needs. An indexer has only a target hash, so it builds this and nothing more. */
+export interface ScoringInput {
   signals: Signal[];
   disputed: boolean;
   proof?: string; // re-checkable proof, if any
   ruling?: 'block' | 'clear';
+}
+
+/** A target as the demo UI shows it: the scoring input plus display text. */
+export interface Target extends ScoringInput {
+  kind: TargetKind;
+  value: string;
+  title: string;
+  blurb: string; // what the mock wallet screen says the user is doing
 }
 
 export interface CheckResult {

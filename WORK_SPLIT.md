@@ -19,8 +19,11 @@ Source of truth for scope is `Lookout PRD (ETHGlobal Mumbai 2026).md`. This file
 2. [x] Install `@arkiv-network/sdk` and assert the schema's limits against the real SDK constants. Done in `packages/arkiv/src/sdk-limits.test.ts`, all limits match.
 2b. [x] Define the nine schemas in code. Done in `packages/arkiv/src/schemas.ts`, with lifetimes and flags in `lifetimes.ts`.
 3. [x] Writers for `report`, `verdict` and `attestation`, plus the verdict refresh. Done in `packages/arkiv/src/writers.ts` with 10 fake-client tests, and verified live on Rabdi (`npm run arkiv:demo`).
-4. [ ] Indexer v1: Arkiv into SQLite, target to signals, plus the temporary `/lookup` endpoint.
-5. [ ] Wire `scoreTarget` to the indexer output.
+4. [x] Indexer v1 in `services/indexer`: Arkiv into SQLite, trusted-writer rules, target to signals, snapshot builder, and the temporary plain `/lookup` endpoint. 52 tests, and verified live on Rabdi (`npm run indexer:sync`).
+5. [x] Wire `scoreTarget` to the indexer output. Done: a real block verdict comes from real Arkiv entities. `scoreTarget` now takes just the scoring fields (`ScoringInput`).
+6. [ ] **Decide how indexers agree on one snapshot** (open question 4 in `arkiv/snapshot-format.md`). Different sync blocks currently give different roots from the same data.
+7. [ ] Checker (re-checkable proof for the drainer bytecode pattern) and the open-feed importer (F5, F6). These produce the verdicts the indexer reads.
+8. [ ] Escrow contract, reputation checkpoint job, and the reviewer panel service (Phase 3).
 
 **Dev B, can start now (no waiting on Dev A)**
 1. [ ] `arkiv/stealth-format.md` (Phase 0 contract).
