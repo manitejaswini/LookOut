@@ -3,7 +3,7 @@ import { sepolia } from 'viem/chains';
 
 /**
  * The two networks the app talks to through the person's wallet.
- *  - escrow: where the report deposit, the bounty pool and reviewer stakes live (a normal EVM chain, Sepolia for now)
+ *  - escrow: where the report deposits and the bounty pool live (a normal EVM chain, Sepolia for now)
  *  - arkiv:  where reports, votes and verdicts are written (Rabdi testnet)
  */
 

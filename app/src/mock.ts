@@ -86,7 +86,7 @@ export const FLOW = [
   ['Index', 'Indexers read Arkiv, build a bucketed lookup table and publish its root hash as a snapshot entity.'],
   ['Check', 'Before signing, the wallet runs a private 2-server PIR lookup and verifies the answer against the Arkiv root.'],
   ['Dispute', 'The real owner signs with the flagged address and posts an attestation. It marks the flag disputed, and only a public operator ruling can overturn it.'],
-  ['Settle', 'A trusted source corroborates the report: the reporter gets the deposit back, a reputation gain and (if a verified human) a stealth bounty. No corroboration: the deposit is refunded. Only an operator ruling can forfeit it.'],
+  ['Settle', 'A trusted source corroborates the report: the reporter gets the deposit back, a reputation gain and (if a verified human) a bounty, all claimable from the escrow. No corroboration: the deposit is refunded. Only an operator ruling can forfeit it.'],
 ];
 
 const now = Date.now();

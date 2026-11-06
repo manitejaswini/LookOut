@@ -4,7 +4,7 @@ import { defaultDeps, SqliteSeatStore, type HandlerDeps } from '@lookout/worldid
 
 /**
  * Server-only wiring for the World ID routes. The seat database is ~/.lookout/worldid/worldid.sqlite (or WORLDID_DB, or under LOOKOUT_DATA_DIR),
- * OUTSIDE the repository: the panel service reads the same file to know who may be drawn as a juror, and a file inside the project
+ * OUTSIDE the repository: the operator service reads the same file to know which wallets are verified humans, and a file inside the project
  * folder would make the dev server reload whenever it changes. It is opened on first use and kept for the life of the server process.
  */
 let store: SqliteSeatStore | undefined;

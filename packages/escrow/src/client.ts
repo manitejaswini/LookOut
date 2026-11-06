@@ -159,7 +159,13 @@ export function createEscrow(deps: EscrowDeps) {
 
     /* ----- resolver (the panel service's wallet) ----- */
     /** A trusted source corroborated the report: the deposit goes back, plus a bounty from the pool when `withBounty` and the pool can pay it. */
-    confirm: (reporter: string, reportId: string, withBounty: boolean) => send('confirm', [checked(reporter), toBytes16(reportId), withBounty]),
+    async confirm(reporter: string, reportId: string, withBounty: boolean): Promise<TxResult & { bountyWei: bigint }> {
+      const tx = await send('confirm', [checked(reporter), toBytes16(reportId), withBounty]);
+      // what was actually credited is in the transaction's own receipt, which cannot lag the way a separate balance read can
+      const receipt = await publicClient.getTransactionReceipt({ hash: tx.hash });
+      const ev = parseEventLogs({ abi: escrowAbi, logs: receipt.logs, eventName: 'Confirmed' })[0];
+      return { ...tx, bountyWei: ev ? BigInt(ev.args.bounty) : 0n };
+    },
     reject: (reporter: string, reportId: string) => send('reject', [checked(reporter), toBytes16(reportId)]),
     /** The report added nothing new or was not corroborated in time: the deposit goes back, with NO bounty. */
     refund: (reporter: string, reportId: string) => send('refund', [checked(reporter), toBytes16(reportId)]),

@@ -3,7 +3,7 @@ import Deck from '../../../Deck';
 
 export const metadata: Metadata = {
   title: 'World ID pitch · Lookout',
-  description: 'Lookout for World Best Use of IDKit: one human, one reviewer seat, proven without revealing identity.',
+  description: 'Lookout for World Best Use of IDKit: one human, one reporter wallet, proven without revealing identity.',
 };
 
 export default function WorldIdPitch() {

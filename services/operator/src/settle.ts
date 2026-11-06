@@ -15,7 +15,7 @@ import type { Journal } from './journal.ts';
 
 export interface ResolveDeps {
   arkiv: EntityWriter;
-  escrow: Pick<Escrow, 'confirm' | 'refund' | 'reject' | 'bountyPool' | 'deposit'>;
+  escrow: Pick<Escrow, 'confirm' | 'refund' | 'reject' | 'deposit'>;
   journal: Journal;
   now: () => number;
   /** wallets bound to a unique human (World ID) */
@@ -70,16 +70,16 @@ export async function applyResolution(deps: ResolveDeps, r: ReportToResolve, res
   }
 
   // confirm: the deposit comes back, and a verified human is credited a bounty in the SAME transaction, so there is no second step
-  // that can fail halfway. The contract pays the bounty only if the pool can afford it, and the pool is read before and after.
+  // that can fail halfway. The contract pays the bounty only if the pool can afford it, and the receipt says whether it did.
   const needsHuman = deps.bountyRequiresHuman ?? CONFIG.BOUNTY_REQUIRES_HUMAN;
   const qualifies = !needsHuman || deps.humans().has(r.reporter.toLowerCase());
   let bounty: BountyOutcome = qualifies ? 'pool-empty' : 'not-a-verified-human';
   await step('confirm', async () => {
     const d = await deps.escrow.deposit(r.reporter, r.reportId);
     if (d.status !== 'locked') { bounty = 'already-settled'; return `already ${d.status}`; }
-    const before = await deps.escrow.bountyPool();
     const tx = await deps.escrow.confirm(r.reporter, r.reportId, qualifies);
-    if (qualifies && (await deps.escrow.bountyPool()) < before) bounty = 'paid';
+    // the amount credited comes from the confirmation's own receipt
+    if (qualifies && tx.bountyWei > 0n) bounty = 'paid';
     return `${tx.hash} bounty:${bounty}`;
   });
   // a retry finds the step already journaled: the outcome of the first run is what the journal says

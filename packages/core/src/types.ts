@@ -41,8 +41,8 @@ export interface CheckResult {
 }
 
 export type EntityKind =
-  | 'report' | 'verdict' | 'attestation' | 'stake' | 'vote'
-  | 'ruling' | 'reputation' | 'snapshot' | 'bounty';
+  | 'report' | 'verdict' | 'attestation' | 'stake'
+  | 'ruling' | 'reputation' | 'snapshot';
 
 export interface ArkivEntity {
   id: string;

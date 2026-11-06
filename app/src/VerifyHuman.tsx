@@ -159,9 +159,9 @@ export default function VerifyHuman() {
       {status.state === 'unconfigured' && <SetupNotice missing={status.missing} problems={status.problems} />}
       {status.state === 'unreachable' && <p className="tiny">Could not reach the server. Is the app running?</p>}
 
-      <label className="mono-label" htmlFor="reviewer-wallet">Your wallet address</label>
+      <label className="mono-label" htmlFor="human-wallet">Your wallet address</label>
       <form className="input-row" onSubmit={(e) => { e.preventDefault(); void start(); }}>
-        <input id="reviewer-wallet" value={wallet} readOnly placeholder="Connect your wallet (top right)" spellCheck={false} autoComplete="off" />
+        <input id="human-wallet" value={wallet} readOnly placeholder="Connect your wallet (top right)" spellCheck={false} autoComplete="off" />
         <button className="btn" type="submit" disabled={busy || !walletOk || status.state !== 'ready'}>
           {busy ? 'Starting…' : 'Verify with World ID'}
         </button>

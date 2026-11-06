@@ -134,7 +134,7 @@
 .slide-table th { font-size: max(9px, calc(var(--u) * 0.8)); padding: calc(var(--u) * 0.6) calc(var(--u) * 0.9); }
 .slide-table td { font-size: calc(var(--u) * 1.05); padding: calc(var(--u) * 0.45) calc(var(--u) * 0.9); white-space: normal; line-height: 1.25; }
 .slide-table .kind { font-size: max(9px, calc(var(--u) * 0.8)); }
-.k-report, .k-stake, .k-vote, .k-reputation, .k-bounty { background: var(--gold); }
+.k-report, .k-stake, .k-reputation { background: var(--gold); }
 
 /* ---------- one slide per CROPS property ---------- */
 .crops { flex: 1; min-height: 0; display: grid; grid-template-columns: 0.7fr 1.3fr; gap: calc(var(--u) * 3); align-items: stretch; }

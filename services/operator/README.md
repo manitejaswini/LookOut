@@ -1,53 +1,70 @@
-# Panel service (trust layer)
+# Operator service
 
-What decides disputed reports and moves the money. The rules live in `@lookout/core` and are pure; this package only moves data.
+What settles reports and keeps the record. The rules live in `@lookout/core` and are pure. This package only moves data.
+
+There is **no vote and no panel**. A report is settled by evidence: a trusted source (a feed or the checker) corroborates it, or it does not.
 
 | Piece | Where | What it does |
 | --- | --- | --- |
-| Reputation rules | `packages/core/src/reputation.ts` | gain on confirmed, 2x loss on rejected, juror win/loss, 30 day half-life, floor 0. Deterministic, so every indexer reaches the same scores |
-| Juror draw + tally | `packages/core/src/panel.ts` | seed-based draw, one human = one seat (World ID nullifier), reporter and disputer excluded, commit-reveal tally, quorum, non-reveal counts as a loss |
-| Case settlement | `src/settle.ts` | ruling on Arkiv, escrow confirm/reject, slash losers, stealth bounty, reputation events. Every step is journaled, so a crash is repaired by running it again |
-| Round driver | `src/driver.ts` | moves a case through seed block, commit round, reveal round, ruling or a fresh round. Restart-safe, one broken case never stops the others |
-| Adapters | `src/adapters.ts` | candidates from World ID seats plus escrow stake plus reputation. The Arkiv vote and block readers are untested until a live run |
-| Case planner | `src/cases.ts` | which cases to open: a report whose deposit is LOCKED in the escrow contract (the contract is asked, not the Arkiv mirror), or an owner dispute with a valid signature proof |
-| Panel service | `src/service.ts`, `src/cli.ts` | one pass: mirror escrow to Arkiv, open cases, advance every case, publish a reputation checkpoint when due. Each part can fail without stopping the others. Also a read-only HTTP API for the app |
-| Stake mirror | `src/mirror.ts` | escrow `Deposited`/settled events become Arkiv `stake` entities |
-| Checkpoint job | `src/checkpoint-job.ts` | next reputation checkpoint from the last one plus new events, published as `reputation` entities. The indexer reads them (`services/indexer/src/checkpoint.ts`) |
-| Escrow contract | `contracts/src/LookoutEscrow.sol`, client `packages/escrow` | deposits, bounty pool, reviewer stakes |
+| Resolution rules | `packages/core/src/resolution.ts` | confirm, refund or wait, from public facts. The automatic path can never forfeit a deposit |
+| Reputation rules | `packages/core/src/reputation.ts` | gain on confirmed, 2x loss on rejected, half-life decay, and a floor for verified humans |
+| Planner | `src/reports.ts` | which reports to act on: a payload that matches its hash AND a deposit that is LOCKED in the escrow contract (the contract is asked, not the Arkiv mirror). Also lists owner disputes with a valid proof |
+| Resolver | `src/resolver.ts`, `src/settle.ts` | looks up what the trusted sources said, applies the rules, and acts: confirm (deposit plus a bounty for a verified human, in one transaction), refund, or wait |
+| Operator commands | `src/cli.ts` | `rule` publishes a ruling with a public reason, `reject` forfeits a deposit, `disputes` lists owner disputes |
+| Stake mirror | `src/mirror.ts` | escrow deposits and settlements become Arkiv `stake` entities |
+| Checkpoint job | `src/checkpoint-job.ts` | publishes the next reputation checkpoint, with the verified-human floor. The indexer reads it |
+| Service | `src/service.ts` | one pass: mirror, resolve, track disputes, checkpoint. Each part can fail without stopping the others. Also a read-only API |
+
+## How a report is settled
+
+| Situation | Result |
+| --- | --- |
+| A trusted source flags the same target AFTER the report, within the window (7 days), and is not the reporter | **Confirmed.** Deposit credited back, reputation up, and if the reporter is a verified human a bounty from the pool |
+| The target was already flagged by an independent source when the report came in | **Refunded** as `already-flagged`. No bounty, so known scams cannot be farmed for rewards |
+| The window closed and nothing corroborated it | **Refunded** as `not-corroborated`. Nothing is forfeited, so an honest early report is never punished for being early |
+| The operator rules the report false (`reject`) | **Forfeited** to the bounty pool, and reputation falls twice as fast. This is the ONLY way a deposit is lost |
+
+The reporter claims everything with one `claim()` on the escrow (the Funds page). Only a verified human is paid a bounty (`BOUNTY_REQUIRES_HUMAN`), so a swarm of fresh wallets cannot farm rewards.
+
+## Disputes
+
+The owner of a flagged wallet address signs a fixed message with that address (`core/owner-proof.ts`). The proof is checked with plain maths by every indexer, and the dispute marks the flag `disputed`. **It never clears a flag by itself.** The operator decides:
+
+```
+npm run operator -- disputes
+npm run operator -- rule 0xADDRESS clear "the owner proved control and the flag came from one report"
+npm run operator -- reject 0xREPORTER <reportId>
+```
+
+A ruling needs a reason, and the reason is public (the ruling's payload on Arkiv).
 
 ## Running it
 
 ```
-npm run panel:keys          once: creates PANEL_PAYER_SECRET and PANEL_ENC_SECRET in .env, and the public key in app/.env.local
-npm run panel:run           real timing (3 day commit round, 2 day reveal round)
-npm run panel:run -- --demo 90 second rounds, a panel of 3, for a recording
-npm run panel:run -- --once one pass, then exit
+npm run operator:run                 real timing (7 day window)
+npm run operator:run -- --demo       a 10 minute window, for a recording
+npm run operator:run -- --window 45  an exact window in seconds
+npm run operator:run -- --once       one pass, then exit
 ```
 
-The API (`127.0.0.1:8790`, read only) serves `/cases`, `/cases?juror=0x...`, `/cases/:id` and `/status`. It never includes the reporter's bounty address. The app's Vote page uses it to show the cases a reviewer was drawn for (`NEXT_PUBLIC_PANEL_URL`).
+Needs in `.env`: `ARKIV_ACCESS_KEY`, `ARKIV_PRIVATE_KEY` (the operator wallet, which is also the escrow resolver), `ESCROW_ADDRESS`, `ESCROW_DEPLOY_BLOCK`, and optionally `ESCROW_RPC_URL`, `WORLDID_DB`, `LOOKOUT_DATA_DIR`. State lives in `~/.lookout/operator/journal.sqlite`, outside the repo on purpose (a file inside the project makes the Next dev server reload).
 
-State lives in `~/.lookout/panel/journal.sqlite`, outside the repo on purpose: a file inside the project makes the Next dev server reload.
-
-## Two kinds of case
-
-- **Report case.** A report with a locked deposit. The panel decides block or clear. Confirmed: deposit refunded, reputation up, a private bounty. Rejected: deposit to the pool, reputation down twice as fast.
-- **Dispute case.** The owner of a flagged wallet address signs a message with that address (`core/owner-proof.ts`). No deposit. A `clear` ruling overturns the flag, a `block` ruling confirms it. A dispute never clears a flag by itself.
+The API (`127.0.0.1:8790`, read only) serves `/reports`, `/reports?reportId=`, `/disputes` and `/status`. It has no write endpoint.
 
 ## Trust limits, stated plainly
 
-- One resolver key decides confirm and reject and slashes. It cannot take deposits for itself (forfeits go to the pool). It cannot pay more bounties than there were confirmed reports, or pay the same one twice, but it does choose WHO is paid. It is still one key and can be wrong or compromised. Anyone can recompute the tally from the revealed votes and the ruling payload (seed, jurors, counts).
-- The bounty payment does not name a reporter or report on chain (`payBounty(bountyId, stealth)`), and `bountyId` is derived from a secret. Timing can still hint at the link. An earlier version of the contract did leak it, and was replaced.
-- The draw seed is the hash of an Arkiv block a few blocks after the case opened, so nobody could know it at open time. A block proposer could still bias a hash slightly, so this is not a randomness beacon.
-- Sybils: a seat needs a World ID nullifier, a stake, and reputation. A seat is not yet bound to a wallet by a signature (open item).
-- Owner disputes cover wallet addresses only.
-- `scripts/demo-jurors.mjs` creates FAKE seats that skip World ID, for recordings only.
+- **One operator key.** It settles reports, can forfeit a deposit and publishes rulings. It cannot take a deposit for itself (forfeits go to the pool), and it can pay a bounty only to the reporter of a report it confirms, at most once and at most `bountyWei`. It can still be wrong or compromised. Every ruling has a public reason.
+- **Verified humans are decided by our server.** The operator checks World ID proofs on its server, so "this wallet is a unique human" is a trust assumption, not something anyone can verify from Arkiv alone.
+- **Trusted sources are a short list in `services/indexer/registry.json`.** A report is only as trustworthy as the sources that corroborate it. Opening that list up is future work.
+- **Owner disputes cover wallet addresses only.** A contract has no key and a domain needs a different proof.
+- **Bounties are paid to the reporter's own wallet.** There is no privacy for a payout: reputation and payouts are tied to the wallet that reported.
 
 ## What has run live
 
-`npm run e2e:live` runs the whole loop on Arkiv Rabdi and the Sepolia escrow: a report with a deposit and a sealed bounty address, the panel opening the case, three demo jurors committing and revealing hidden votes, the ruling, the deposit settled, the stealth bounty found with the reporter's own keys, the stake mirrored on Arkiv, and the loser slashed. `npm run panel:live`, `npm run escrow:smoke` and `npm run arkiv:trust-smoke` cover the pieces.
+`npm run e2e:live -- --i-know-this-fakes-world-id` runs the whole loop on Arkiv Rabdi and the Sepolia escrow: a verified human's report corroborated by a trusted source, confirmed with the deposit and a bounty claimed in one transaction, a report nobody corroborates refunded, and a copied report refunded as already flagged. The "verified human" in that script is faked in the local seat database, because there is only one real World ID.
 
 ## Not yet run live
 
-- The browser wallet paths (report with deposit, dispute, vote) in a real wallet.
-- Real World ID seats and the seat-to-wallet binding.
+- The browser wallet paths (report with deposit, dispute, verify, funds) in a real wallet.
+- A real World ID proof.
 - A second, independent PIR operator.

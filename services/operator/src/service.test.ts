@@ -90,9 +90,8 @@ function rig(over: Partial<ServiceDeps> = {}) {
     async patchEntity() {},
   };
   const escrowFake = {
-    deposit: async () => ({ status: 'locked' as const, lockedAt: 0n }), confirm: async () => ({ hash: '0xc', blockNumber: 1n, gasUsed: 1n }),
+    deposit: async () => ({ status: 'locked' as const, lockedAt: 0n }), confirm: async () => ({ hash: '0xc', blockNumber: 1n, gasUsed: 1n, bountyWei: 5n * 10n ** 14n }),
     refund: async () => ({ hash: '0xr', blockNumber: 1n, gasUsed: 1n }), reject: async () => ({ hash: '0xj', blockNumber: 1n, gasUsed: 1n }),
-    bountyPool: async () => 10n ** 18n,
   };
   const deps: ServiceDeps = {
     journal, humans: () => humans, arkiv, escrowFromBlock: 50n, latestEscrowBlock: async () => w.ebl, now: () => w.t, checkpointEverySeconds: 600,

@@ -1,3 +1,5 @@
+> **Note (2026-11-07):** this is the ORIGINAL design document. What was actually built differs: there is no reviewer vote or panel (a trusted source corroborates a report, and one operator key rules in public), no stealth-address bounty (a bounty is credited to the reporter inside the escrow), and no Ethereum Foundation track work. See `README.md` for what exists.
+
 # Lookout: PRD (ETHGlobal Mumbai 2026)
 
 Nov 6, 2026 · @Rohit
