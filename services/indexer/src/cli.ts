@@ -9,7 +9,6 @@
 // Reads ARKIV_ACCESS_KEY from the gitignored .env. It only reads from Arkiv, and never prints a key.
 
 import { existsSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
 import { ENUMS, createArkivClients, createArkivReader } from '@lookout/arkiv';
 import { readSnapshotRows, trustedRoots } from '@lookout/arkiv/roots';
 import type { TargetKind } from '@lookout/core';
@@ -19,12 +18,12 @@ import { loadRegistry } from './registry.ts';
 import { startServer } from './server.ts';
 import { publishSnapshot } from './publish.ts';
 import { buildEpochSnapshot } from './snapshot.ts';
-import { Store } from './store.ts';
+import { defaultDbPath, Store } from './store.ts';
 
 const envPath = new URL('../../../.env', import.meta.url);
 if (existsSync(envPath)) process.loadEnvFile(envPath);
 
-const dbPath = process.env.INDEXER_DB ?? fileURLToPath(new URL('../data/index.sqlite', import.meta.url));
+const dbPath = process.env.INDEXER_DB ?? defaultDbPath();
 const [command, ...args] = process.argv.slice(2);
 
 function reader() {

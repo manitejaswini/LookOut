@@ -243,7 +243,11 @@ footer { margin-top: 40px; }
 .connect { font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; text-decoration: none; color: var(--ink); background: var(--neon); border: 1px solid var(--ink); padding: 7px 12px; cursor: pointer; }
 .connect:hover { background: var(--ink); color: var(--neon); }
 .connect-on { background: transparent; text-transform: none; letter-spacing: 0.04em; font-size: 11px; }
-.connect-idle { display: inline-block; width: 120px; height: 28px; border: 1px dashed var(--line); }
+.connect-idle { background: transparent; display: inline-block; width: 120px; height: 28px; border: 1px dashed var(--line); }
 .select { flex: 1; min-width: 0; padding: 12px 14px; border: 1px solid var(--line); border-radius: 0; background: #fff; font: 13px var(--mono); color: var(--ink); }
 .vote-choice { border: 1px solid var(--line); margin: 14px 0 6px; padding: 10px 14px; display: grid; gap: 8px; font: 13px var(--mono); }
 .vote-choice legend { padding: 0 6px; }
+
+.ack { display: block; margin: 12px 0; font: 13px var(--mono); line-height: 1.5; cursor: pointer; }
+.ack input { margin-right: 6px; }
+.paylog { margin-top: 20px; }

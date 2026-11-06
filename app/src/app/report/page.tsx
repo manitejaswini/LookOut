@@ -6,7 +6,9 @@ export const metadata: Metadata = {
   description: 'File a scam report with a refundable deposit. Honest reports get the deposit back and earn reputation.',
 };
 
-export default function ReportPage() {
+export default async function ReportPage({ searchParams }: { searchParams: Promise<{ kind?: string; value?: string }> }) {
+  const q = await searchParams;
+  const kind = q.kind === 'address' || q.kind === 'contract' || q.kind === 'domain' ? q.kind : undefined;
   return (
     <main>
       <section className="section">
@@ -24,7 +26,7 @@ export default function ReportPage() {
               <li><b>Testnet.</b> Deposits are test ETH on Sepolia and reports go to the Arkiv testnet.</li>
             </ul>
           </div>
-          <ReportForm />
+          <ReportForm initialKind={kind} initialValue={typeof q.value === 'string' ? q.value.slice(0, 300) : undefined} />
         </div>
       </section>
     </main>

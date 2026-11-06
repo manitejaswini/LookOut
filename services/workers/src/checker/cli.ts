@@ -13,7 +13,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createArkivClients } from '@lookout/arkiv';
-import { loadRegistry, loadState, Store } from '@lookout/indexer';
+import { defaultDbPath, loadRegistry, loadState, Store } from '@lookout/indexer';
 import { checkContract, parseDrainerList, rpcCodeSource } from './contract.ts';
 import { checkDomain, type CheckOutcome } from './domain.ts';
 import { anyOf, indexFlagSource, StaticFlagSource, type FlagSource } from './flags.ts';
@@ -34,7 +34,7 @@ const listPath = (env: string | undefined, file: string) => env ?? fileURLToPath
 function flagSource(): FlagSource {
   const sources: FlagSource[] = [new StaticFlagSource(JSON.parse(readFileSync(listPath(process.env.FLAG_LIST, 'flagged.json'), 'utf8')))];
   // also treat anything Lookout already blocks as flagged, when a synced indexer cache exists
-  const dbPath = process.env.INDEXER_DB ?? fileURLToPath(new URL('../../../indexer/data/index.sqlite', import.meta.url));
+  const dbPath = process.env.INDEXER_DB ?? defaultDbPath();
   if (existsSync(dbPath)) {
     const store = new Store(dbPath);
     const state = loadState(store, loadRegistry());

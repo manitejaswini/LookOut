@@ -12,7 +12,7 @@ Arkiv (Rabdi)  ->  reader  ->  SQLite cache  ->  signals (trust rules)  ->  scor
 You need `ARKIV_ACCESS_KEY` in the repo-root `.env` (copy `.env.example`). The indexer only reads, so it needs no wallet and no gas.
 
 ```
-npm run indexer:sync                                   read Arkiv into services/indexer/data/index.sqlite
+npm run indexer:sync                                   read Arkiv into ~/.lookout/indexer/index.sqlite (override with INDEXER_DB or LOOKOUT_DATA_DIR)
 npm run lookup -w @lookout/indexer -- domain lookout-demo-airdrop.example
 npm run snapshot -w @lookout/indexer                   build the 8 MiB table and print its root
 npm run indexer:serve                                  sync every 30 s, serve the TEMPORARY plain /lookup on 127.0.0.1:8787

@@ -3,6 +3,7 @@ import { createPublicClient, createWalletClient, custom, http, parseEther, type 
 import { createReport, createVote, newReportId, revealVote, type EntityWriter, type TrustWriter } from '@lookout/arkiv';
 import { CONFIG } from '@lookout/core';
 import { createEscrow } from '@lookout/escrow';
+import type { PaymentRecord, SendPorts } from '../flows/pay-flow';
 import type { ReportPorts } from '../flows/report-flow';
 import type { VotePorts, VoteStorage } from '../flows/vote-flow';
 import { ARKIV_CHAIN, ESCROW_ADDRESS, ESCROW_CHAIN, escrowConfigured } from './chains';
@@ -57,3 +58,37 @@ export function votePorts(w: WalletState): VotePorts {
 /** What the deposit costs, for showing before the person confirms. Matches the contract's configured deposit. */
 export const DEPOSIT_ETH_LABEL = String(CONFIG.DEPOSIT_ETH);
 export const DEPOSIT_WEI = parseEther(DEPOSIT_ETH_LABEL);
+
+/* ---------------------------------- payments ---------------------------------- */
+
+const PAYMENTS_KEY = 'lookout.payments.v0';
+
+export const paymentHistory = (): PaymentRecord[] => {
+  try { return JSON.parse(window.localStorage.getItem(PAYMENTS_KEY) ?? '[]') as PaymentRecord[]; } catch { return []; }
+};
+
+/**
+ * Records are kept per attempt: the intent first, then the same attempt again with its transaction hash.
+ * An entry with the same time and recipient is replaced, so one payment shows once.
+ */
+export function recordPayment(entry: PaymentRecord): void {
+  const rest = paymentHistory().filter((p) => !(p.at === entry.at && p.recipient === entry.recipient));
+  window.localStorage.setItem(PAYMENTS_KEY, JSON.stringify([entry, ...rest].slice(0, 20)));
+}
+
+/** Plain ETH on the escrow chain (Sepolia). The person approves it in their wallet. */
+export function payPorts(w: WalletState): SendPorts {
+  return {
+    now: () => Date.now(),
+    switchChain: () => w.switchChain('escrow'),
+    sendEth: async (to, wei) => {
+      const wallet = createWalletClient({ chain: ESCROW_CHAIN, transport: custom(w.provider()), account: needAddress(w) });
+      return { hash: await wallet.sendTransaction({ to, value: wei }) };
+    },
+    record: recordPayment,
+  };
+}
+
+export async function ethBalance(address: `0x${string}`): Promise<bigint> {
+  return createPublicClient({ chain: ESCROW_CHAIN, transport: http() }).getBalance({ address });
+}

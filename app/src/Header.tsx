@@ -10,6 +10,7 @@ const NAV: [string, string][] = [
   ['/#explorer', 'Explorer'],
   ['/#agent', 'Agent'],
   ['/#how', 'How it works'],
+  ['/pay', 'Pay'],
   ['/report', 'Report'],
   ['/reviewer', 'Join panel'],
   ['/vote', 'Vote'],
