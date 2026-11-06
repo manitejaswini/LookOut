@@ -85,7 +85,7 @@ export class SqliteSeatStore implements SeatStore {
   }
 
   seats(action: string): { wallet: string; nullifier: string }[] {
-    return this.db.prepare('SELECT wallet, nullifier FROM seats WHERE action = ? ORDER BY enrolled_at, rowid').all(action) as { wallet: string; nullifier: string }[];
+    return (this.db.prepare('SELECT wallet, nullifier FROM seats WHERE action = ? ORDER BY enrolled_at, rowid').all(action) as { wallet: string; nullifier: string }[]).map((r) => ({ wallet: r.wallet, nullifier: r.nullifier }));
   }
 
   close(): void {
