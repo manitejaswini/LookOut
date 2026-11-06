@@ -30,7 +30,7 @@ export class Store {
   }
 
   /** Replaces everything in one transaction. A failed sync leaves the previous data untouched. */
-  replaceAll(rows: { kind: IndexedKind; row: RawRow }[], timing: BlockTiming): void {
+  replaceAll(rows: { kind: IndexedKind; row: RawRow }[], timing: BlockTiming, epoch?: BlockTiming): void {
     this.db.exec('BEGIN');
     try {
       this.db.exec('DELETE FROM entities');
@@ -42,6 +42,7 @@ export class Store {
       }
       const setMeta = this.db.prepare('INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v');
       setMeta.run('timing', JSON.stringify(timing));
+      if (epoch) setMeta.run('epoch', JSON.stringify(epoch));
       setMeta.run('syncedAt', String(Date.now()));
       this.db.exec('COMMIT');
     } catch (e) {
@@ -65,6 +66,12 @@ export class Store {
 
   timing(): BlockTiming | null {
     const r = this.db.prepare("SELECT v FROM meta WHERE k = 'timing'").get() as { v: string } | undefined;
+    return r ? (JSON.parse(r.v) as BlockTiming) : null;
+  }
+
+  /** The epoch block this cache was synced into, with its exact chain timestamp. Null for caches from before epochs. */
+  epoch(): BlockTiming | null {
+    const r = this.db.prepare("SELECT v FROM meta WHERE k = 'epoch'").get() as { v: string } | undefined;
     return r ? (JSON.parse(r.v) as BlockTiming) : null;
   }
 

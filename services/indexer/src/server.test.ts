@@ -2,15 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { targetHash } from '@lookout/core';
-import { buildTargets } from './signals.ts';
 import { startServer } from './server.ts';
-import type { IndexState } from './lookup.ts';
+import { buildIndexState, type IndexState } from './lookup.ts';
 import { ADDR, DOMAIN, attestation, checkerVerdict, feedVerdict, registry, report, timing, verdict } from './fixtures.ts';
 
-function stateFrom(entities: Parameters<typeof buildTargets>[0]): IndexState {
-  const { targets, dropped } = buildTargets(entities, timing, registry);
-  return { targets, dropped, entities, timing, entityCount: entities.length, syncedAt: 1 };
-}
+const stateFrom = (entities: Parameters<typeof buildIndexState>[0]): IndexState => buildIndexState(entities, timing, null, registry, 1);
 
 async function withServer(state: IndexState | null, fn: (base: string) => Promise<void>) {
   const server = await startServer(() => state, { port: 0 });

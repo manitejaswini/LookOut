@@ -6,6 +6,10 @@ export const CONFIG = {
   REPORT_EXPIRY_HOURS: 24,
   DEPOSIT_ETH: 0.01,
 
+  // Snapshots are built as of an epoch block, a multiple of this many blocks (300 x 2 s = 10 minutes), so that
+  // independent indexers produce the same bytes and root. Every indexer and client must use the same value.
+  SNAPSHOT_EPOCH_BLOCKS: 300,
+
   // Arkiv entity lifetimes (see arkiv/schema.md). Arkiv counts lifetimes in 2-second blocks and
   // allows at most 7,884,000 blocks (about 182.5 days). Placeholders are marked "tune".
   VERDICT_REFRESH_HOURS: 6, // a source re-extends its verdict while the finding holds

@@ -15,7 +15,7 @@ import { lookup, loadState, type IndexState } from './lookup.ts';
 import { arkivReaderClient, syncStore } from './reader.ts';
 import { loadRegistry } from './registry.ts';
 import { startServer } from './server.ts';
-import { buildStoreSnapshot } from './snapshot.ts';
+import { buildEpochSnapshot } from './snapshot.ts';
 import { Store } from './store.ts';
 
 const envPath = new URL('../../../.env', import.meta.url);
@@ -65,7 +65,7 @@ try {
     console.log(JSON.stringify(lookup(need(store), kind as TargetKind, rest.join(' ')), null, 2));
   } else if (command === 'snapshot') {
     const state = need(store);
-    const snap = buildStoreSnapshot(state.targets, state.timing);
+    const snap = buildEpochSnapshot(state);
     console.log('snapshotId  :', snap.snapshotId);
     console.log('bucketCount :', snap.bucketCount, `(${(snap.buckets.length / 1024 / 1024).toFixed(0)} MiB table, ${(snap.hashes.length / 1024).toFixed(0)} KiB hashes)`);
     console.log('root        :', snap.root);

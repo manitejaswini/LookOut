@@ -7,7 +7,7 @@
 // the second operator rather than running this twice (two syncs can land on different blocks and differ).
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { Store, buildStoreSnapshot, loadRegistry, loadState } from '@lookout/indexer';
+import { Store, buildEpochSnapshot, loadRegistry, loadState } from '@lookout/indexer';
 import { saveSnapshot } from './store.ts';
 
 const arg = (flag: string, fallback: string) => {
@@ -26,7 +26,7 @@ if (!state) {
   console.error('nothing synced yet. Run: npm run indexer:sync');
   process.exit(1);
 }
-const snap = buildStoreSnapshot(state.targets, state.timing);
+const snap = buildEpochSnapshot(state);
 saveSnapshot(out, snap);
-console.log(`snapshot ${snap.snapshotId}: ${state.targets.size} targets, ${snap.bucketCount} buckets, root ${snap.root}`);
+console.log(`snapshot ${snap.snapshotId}: ${state.epochTargets.size} targets, ${snap.bucketCount} buckets, root ${snap.root}`);
 console.log(`written to ${out}`);

@@ -1,16 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
-import { buildTargets } from './signals.ts';
 import { startServer } from './server.ts';
 import { listEntities } from './entities.ts';
-import type { IndexState } from './lookup.ts';
+import { buildIndexState, type IndexState } from './lookup.ts';
 import { ADDR, attestation, checkerVerdict, feedVerdict, registry, report, timing } from './fixtures.ts';
 
-function stateFrom(entities: Parameters<typeof buildTargets>[0]): IndexState {
-  const { targets, dropped } = buildTargets(entities, timing, registry);
-  return { targets, dropped, entities, timing, entityCount: entities.length, syncedAt: 1 };
-}
+const stateFrom = (entities: Parameters<typeof buildIndexState>[0]): IndexState => buildIndexState(entities, timing, null, registry, 1);
 const state = () => stateFrom([report(ADDR.rep82), feedVerdict(), checkerVerdict(true), attestation(ADDR.attester)]);
 
 test('times are converted from blocks using the block time, and expiry is in the future for live entities', () => {
