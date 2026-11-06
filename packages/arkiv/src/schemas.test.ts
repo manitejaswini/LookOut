@@ -20,7 +20,6 @@ const INDEXED: Record<Kind, string[]> = {
   ruling: ['caseId', 'targetHash', 'outcome'],
   reputation: ['wallet', 'snapshotId'],
   snapshot: ['snapshotId', 'indexerId'],
-  bounty: ['reportId'],
 };
 
 const OPTIONAL: Record<Kind, string[]> = {
@@ -34,8 +33,8 @@ const OPTIONAL: Record<Kind, string[]> = {
   bounty: [], // payload is required: a bounty without an ephemeral key is useless
 };
 
-test('there are exactly eight kinds, and each is a named schema lookout.v0.<kind>', () => {
-  assert.equal(KINDS.length, 8);
+test('there are exactly seven kinds, and each is a named schema lookout.v0.<kind>', () => {
+  assert.equal(KINDS.length, 7);
   for (const k of KINDS) {
     const s = SCHEMAS[k];
     assert.ok(isSchema(s), k);
@@ -105,7 +104,6 @@ test('lifetimes, in blocks, match the doc and stay under the 182.5 day maximum',
     attestation: 1_296_000n, // 30 days
     ruling: 3_888_000n,     // 90 days
     stake: 1_296_000n,      // 30 days (tune)
-    bounty: 2_592_000n,     // 60 days (tune)
     snapshot: 604_800n,     // 14 days (tune)
     reputation: 604_800n,   // 14 days (tune)
   };

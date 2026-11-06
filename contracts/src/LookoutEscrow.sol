@@ -7,11 +7,11 @@ pragma solidity 0.8.24;
 /// Arkiv entities (`stake`) mirror this contract's state. THIS contract is the source of truth for money.
 ///
 /// Trust model, stated plainly:
-///  - One address, `resolver`, settles every report: `confirm` (a trusted source corroborated it: deposit back, and a bounty may
-///    follow), `refund` (it added nothing new or was not corroborated in time: deposit back, NO bounty) or `reject` (the
+///  - One address, `resolver`, settles every report: `confirm` (a trusted source corroborated it: deposit back, plus a bounty from
+///    the pool if the reporter qualifies), `refund` (it added nothing new or was not corroborated in time: deposit back, NO bounty) or `reject` (the
 ///    operator rules it false: the deposit is forfeited). It is a single key, so it can be wrong or compromised. What it
-///    CANNOT do: take anyone's deposit for itself (forfeits go to the bounty pool, never to the resolver), pay a bounty twice,
-///    or pay more bounties than there were confirmed reports.
+///    CANNOT do: take anyone's deposit for itself (forfeits go to the bounty pool, never to the resolver), or pay a bounty to anyone
+///    but the reporter of a report it confirms, once, and never more than `bountyWei`.
 ///  - If the resolver never decides, the reporter can reclaim their deposit after `resolveWindow`.
 contract LookoutEscrow {
     /* ------------------------------ configuration ----------------------------- */
@@ -38,14 +38,6 @@ contract LookoutEscrow {
 
     mapping(address => uint256) public claimable;
 
-    /// @notice bounties already paid, by an OPAQUE id the resolver derives from a secret. The id is deliberately not
-    /// the deposit key: if it were, anyone could compute it from a public report and link the stealth address to the reporter.
-    mapping(bytes32 => bool) public bountyPaid;
-    /// @notice how many reports were confirmed, and how many bounties were paid. A bounty can never be paid unless a
-    /// confirmation is still unrewarded, so the resolver cannot pay more bounties than there were confirmed reports.
-    uint256 public confirmedCount;
-    uint256 public bountiesPaid;
-
     uint256 public bountyPool;
     uint256 public totalLocked;
     uint256 public totalClaimable;
@@ -55,12 +47,11 @@ contract LookoutEscrow {
     /* --------------------------------- events --------------------------------- */
 
     event Deposited(bytes32 indexed key, address indexed reporter, bytes16 reportId, uint256 amount);
-    event Confirmed(bytes32 indexed key, address indexed reporter, bytes16 reportId);
+    event Confirmed(bytes32 indexed key, address indexed reporter, bytes16 reportId, uint256 bounty);
     event Rejected(bytes32 indexed key, address indexed reporter, bytes16 reportId, uint256 forfeited);
     event Reclaimed(bytes32 indexed key, address indexed reporter, bytes16 reportId);
     event Refunded(bytes32 indexed key, address indexed reporter, bytes16 reportId);
     event Claimed(address indexed to, uint256 amount);
-    event BountyPaid(address indexed stealth, uint256 amount);
     event PoolFunded(address indexed from, uint256 amount);
 
     /* --------------------------------- errors --------------------------------- */
@@ -72,9 +63,6 @@ contract LookoutEscrow {
     error NotLocked();
     error TooEarly();
     error NothingToClaim();
-    error NotConfirmed();
-    error AlreadyPaid();
-    error PoolTooSmall();
     error ZeroAddress();
     error TransferFailed();
     error BadConfig();
@@ -128,14 +116,17 @@ contract LookoutEscrow {
         emit Deposited(key, msg.sender, reportId, msg.value);
     }
 
-    /// @notice The report was confirmed: the deposit becomes claimable by the reporter. A bounty can then be paid.
-    function confirm(address reporter, bytes16 reportId) external onlyResolver {
+    /// @notice A trusted source corroborated the report: the deposit goes back, and, if the resolver says the reporter qualifies
+    /// (a verified human) and the pool can afford it, a bounty is added. Both are credited to the reporter's claimable balance.
+    /// The bounty is paid out of the pool, never out of anyone else's deposit, and it is at most `bountyWei` per confirmed report.
+    function confirm(address reporter, bytes16 reportId, bool withBounty) external onlyResolver {
         (bytes32 key, Deposit storage d) = _locked(reporter, reportId);
         d.status = Status.Returned;
         totalLocked -= depositWei;
-        confirmedCount += 1;
-        _credit(reporter, depositWei);
-        emit Confirmed(key, reporter, reportId);
+        uint256 bounty = (withBounty && bountyPool >= bountyWei) ? bountyWei : 0;
+        if (bounty > 0) bountyPool -= bounty;
+        _credit(reporter, depositWei + bounty);
+        emit Confirmed(key, reporter, reportId, bounty);
     }
 
     /// @notice The report was rejected: the deposit is forfeited to the bounty pool. The resolver gets nothing.
@@ -181,28 +172,6 @@ contract LookoutEscrow {
         _send(msg.sender, amount);
     }
 
-    /// @notice Pay one bounty from the pool to a one-time stealth address.
-    ///
-    /// PRIVACY: this takes NO reporter and NO report id, and its event names only the stealth address. Everything an
-    /// observer can see on chain is "the pool paid some address", not "this reporter's report was rewarded". Which report
-    /// a bounty belongs to is known only to the resolver, which derives `bountyId` from a secret (so it cannot be recomputed
-    /// from public data). What stays visible: the amount, the time, and that it follows a confirmation. With few reports,
-    /// timing alone can still hint at the link, so this hides the link from casual analysis and not from a determined observer.
-    ///
-    /// LIMITS on the resolver, since it no longer names a report here: one payment per `bountyId`, never more payments than
-    /// confirmed reports, and never more than the pool holds. It still chooses WHO is paid, which is the trust it already has.
-    function payBounty(bytes32 bountyId, address payable stealth) external nonReentrant onlyResolver {
-        if (stealth == address(0)) revert ZeroAddress();
-        if (bountyPaid[bountyId]) revert AlreadyPaid();
-        if (bountiesPaid >= confirmedCount) revert NotConfirmed();
-        if (bountyPool < bountyWei) revert PoolTooSmall();
-        bountyPaid[bountyId] = true;
-        bountiesPaid += 1;
-        bountyPool -= bountyWei;
-        emit BountyPaid(stealth, bountyWei);
-        _send(stealth, bountyWei);
-    }
-
     /* -------------------------------- internals -------------------------------- */
 
     function _locked(address reporter, bytes16 reportId) private view returns (bytes32 key, Deposit storage d) {
@@ -218,7 +187,7 @@ contract LookoutEscrow {
 
     function _send(address to, uint256 amount) private {
         // every caller is guarded by nonReentrant, and updates all state and emits its event BEFORE calling this.
-        // Recipients: the caller itself (claim) or the resolver's chosen stealth address (payBounty).
+        // Recipient: the caller itself (claim).
         // forge-lint: disable-next-line(arbitrary-send-eth, reentrancy-eth)
         (bool ok, ) = payable(to).call{value: amount}("");
         if (!ok) revert TransferFailed();

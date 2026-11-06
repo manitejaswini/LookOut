@@ -27,7 +27,6 @@ export const CONFIG = {
   ATTESTATION_DAYS: 30,
   RULING_DAYS: 90,
   STAKE_DAYS: 30, // tune: "until resolved plus 7 days", set long and extended or left to lapse
-  BOUNTY_DAYS: 60, // tune: "until claimed plus 30 days"
   SNAPSHOT_DAYS: 14, // tune: "keep the latest few"
   REPUTATION_DAYS: 14, // tune: lives with its snapshot
 };

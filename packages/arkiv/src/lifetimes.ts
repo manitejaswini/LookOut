@@ -14,7 +14,6 @@ export const LIFETIMES: Record<Kind, () => ReturnType<typeof ExpirationTime.from
   ruling: () => ExpirationTime.fromDays(CONFIG.RULING_DAYS),
   reputation: () => ExpirationTime.fromDays(CONFIG.REPUTATION_DAYS),
   snapshot: () => ExpirationTime.fromDays(CONFIG.SNAPSHOT_DAYS),
-  bounty: () => ExpirationTime.fromDays(CONFIG.BOUNTY_DAYS),
 };
 
 /** What a verdict refresh asks `extendEntity` for: another full verdict lifetime counted from now. */
@@ -33,5 +32,4 @@ export const CREATION_FLAGS: Record<Kind, { readonly?: boolean }> = {
   ruling: { readonly: true },
   reputation: { readonly: true },
   snapshot: { readonly: true },
-  bounty: { readonly: true },
 };

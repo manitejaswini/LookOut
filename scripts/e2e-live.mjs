@@ -77,6 +77,17 @@ const meta = metaAddress(keys);
 const encPub = payerEncryptionPublicKey(hex(PANEL_ENC_SECRET));
 const rand = () => newReportId().slice(0, 8);
 
+// the operator and this script both write from the deployer wallet, and two simultaneous transactions can collide: retry
+async function withRetry(label, fn, tries = 6) {
+  for (let i = 1; ; i++) {
+    try { return await fn(); } catch (e) {
+      if (i >= tries) throw e;
+      console.log(`       (${label} collided or failed, retrying ${i}/${tries - 1})`);
+      await sleep(4000);
+    }
+  }
+}
+
 async function file(domain) {
   const reportId = newReportId();
   await reporterEscrow.lockDeposit(reportId);
@@ -110,7 +121,7 @@ try {
   check(waiting.state === 'waiting', 'the operator is waiting for corroboration', `decide by ${new Date(waiting.decideBy * 1000).toISOString().slice(11, 19)}`);
   check((await operatorEscrow.deposit(reporter, a.reportId)).status === 'locked', 'the deposit is still locked while it waits');
 
-  await createVerdict(deployer.writer, { kind: 'domain', value: domain, sourceType: 'checker', sourceId: 'lookout-checker', level: 'block', proofHash: `0x${'11'.repeat(32)}`, reason: 'DEMO FIXTURE: stands in for a real finding' });
+  await withRetry('the checker verdict', () => createVerdict(deployer.writer, { kind: 'domain', value: domain, sourceType: 'checker', sourceId: 'lookout-checker', level: 'block', proofHash: `0x${'11'.repeat(32)}`, reason: 'DEMO FIXTURE: stands in for a real finding' }));
   ok('the trusted checker flags the same target, AFTER the report');
   const confirmed = await waitFor('the report to be confirmed', async () => { const s = await statusOf(a.reportId); return s?.state === 'confirmed' ? s : null; });
   check(confirmed.evidence.some((e) => e.sourceId === 'lookout-checker'), 'confirmed on the checker evidence', JSON.stringify(confirmed.evidence));

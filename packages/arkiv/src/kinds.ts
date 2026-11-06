@@ -1,8 +1,8 @@
 import type { SourceType, TargetKind } from '@lookout/core';
 
-/** The eight entity kinds. Each one is its own named Arkiv schema, see arkiv/schema.md. */
+/** The seven entity kinds. Each one is its own named Arkiv schema, see arkiv/schema.md. */
 export const KINDS = [
-  'report', 'verdict', 'attestation', 'stake', 'ruling', 'reputation', 'snapshot', 'bounty',
+  'report', 'verdict', 'attestation', 'stake', 'ruling', 'reputation', 'snapshot',
 ] as const;
 export type Kind = (typeof KINDS)[number];
 

@@ -61,12 +61,6 @@ const snapshot = defineSchema(schemaName('snapshot'), {
   indexerId: str().indexed(),
 });
 
-const bounty = defineSchema(schemaName('bounty'), {
-  reportId: str().indexed(),
-  amountTier: i32(),
-  payload: bytes(), // ephemeral public key, format in arkiv/stealth-format.md
-});
-
-export const SCHEMAS = { report, verdict, attestation, stake, ruling, reputation, snapshot, bounty } as const;
+export const SCHEMAS = { report, verdict, attestation, stake, ruling, reputation, snapshot } as const;
 
 export const schemaOf = <K extends Kind>(kind: K): (typeof SCHEMAS)[K] => SCHEMAS[kind];

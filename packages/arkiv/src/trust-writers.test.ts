@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { targetHash } from '@lookout/core';
 import { SCHEMAS } from './schemas.ts';
 import {
-  createBounty, createReputation, createRuling, createStake, publishReputationCheckpoint, setStakeStatus,
+  createReputation, createRuling, createStake, publishReputationCheckpoint, setStakeStatus,
   type TrustWriter,
 } from './trust-writers.ts';
 
@@ -133,35 +133,4 @@ test('publishReputationCheckpoint writes the non-zero scores in a stable order a
   const out = await publishReputationCheckpoint(client, 'rep-001', new Map([[w3, 5], [w1, 10], [w2, 0]]));
   assert.deepEqual(out, { written: 2, skipped: 1 });
   assert.deepEqual(calls.map((c) => plain((c.args[1] as { wallet: unknown }).wallet)), [w1, w3]);
-});
-
-/* ---------- bounty ---------- */
-
-test('createBounty writes the 33-byte compressed key as the only payload, readonly, with a 60 day lifetime', async () => {
-  const { client, calls } = fake();
-  const R = `02${'ab'.repeat(32)}`;
-  await createBounty(client, { reportId: REPORT_ID, amountTier: 3, ephemeralPublicKey: `0x${R}` });
-  const { schema, values, options } = created(calls);
-  assert.equal(schema, SCHEMAS.bounty);
-  assert.equal(values.amountTier, 3);
-  assert.equal((values.payload as Uint8Array).length, 33);
-  assert.equal((values.payload as Uint8Array)[0], 0x02);
-  assert.equal(options.flags.readonly, true);
-  assert.equal(blocks(options.expiration), 2_592_000n);
-  // bytes work the same as hex
-  await createBounty(client, { reportId: REPORT_ID, amountTier: 0, ephemeralPublicKey: Uint8Array.from(R.match(/../g)!.map((h) => parseInt(h, 16))) });
-  assert.equal(calls.length, 2);
-});
-
-test('createBounty refuses anything that is not a compressed key, a tier outside 0 to 255, or a bad report id', async () => {
-  const { client, calls } = fake();
-  const good = `03${'cd'.repeat(32)}`;
-  await assert.rejects(createBounty(client, { reportId: REPORT_ID, amountTier: 1, ephemeralPublicKey: `04${'cd'.repeat(32)}` }), /compressed/);
-  await assert.rejects(createBounty(client, { reportId: REPORT_ID, amountTier: 1, ephemeralPublicKey: '0x1234' }), /33 bytes/);
-  await assert.rejects(createBounty(client, { reportId: REPORT_ID, amountTier: 1, ephemeralPublicKey: new Uint8Array(32) }), /33 bytes/);
-  await assert.rejects(createBounty(client, { reportId: REPORT_ID, amountTier: 256, ephemeralPublicKey: good }), /amountTier/);
-  await assert.rejects(createBounty(client, { reportId: REPORT_ID, amountTier: -1, ephemeralPublicKey: good }), /amountTier/);
-  await assert.rejects(createBounty(client, { reportId: REPORT_ID, amountTier: 1.5, ephemeralPublicKey: good }), /amountTier/);
-  await assert.rejects(createBounty(client, { reportId: 'nope', amountTier: 1, ephemeralPublicKey: good }), /reportId/);
-  assert.equal(calls.length, 0);
 });

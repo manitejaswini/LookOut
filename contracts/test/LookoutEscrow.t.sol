@@ -36,16 +36,6 @@ contract RefusesEth {
     receive() external payable { revert("no thanks"); }
 }
 
-/// A resolver that is also the recipient and tries to call payBounty again from inside the payment.
-contract ReenteringResolver {
-    LookoutEscrow public escrow;
-    bytes32 public bountyId;
-
-    function set(LookoutEscrow e, bytes32 id) external { escrow = e; bountyId = id; }
-    function pay(address payable stealth) external { escrow.payBounty(bountyId, stealth); }
-    receive() external payable { escrow.payBounty(bountyId, payable(address(this))); }
-}
-
 contract LookoutEscrowTest {
     Vm constant vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
@@ -57,14 +47,10 @@ contract LookoutEscrowTest {
     address constant ALICE = address(0xA11CE);
     address constant BOB = address(0xB0B);
     address constant CAROL = address(0xCA201);
-    address constant STEALTH = address(0x57EA17);
     address constant ATTACKER = address(0xBAD);
 
     bytes16 constant ID1 = bytes16(0x0123456789abcdef0123456789abcdef);
     bytes16 constant ID2 = bytes16(0xfedcba9876543210fedcba9876543210);
-    // opaque bounty ids, as the resolver derives them from a secret
-    bytes32 constant BID1 = keccak256("bounty-1");
-    bytes32 constant BID2 = keccak256("bounty-2");
 
     LookoutEscrow escrow;
 
@@ -136,7 +122,7 @@ contract LookoutEscrowTest {
     function test_confirmMakesTheDepositClaimableAndClaimPaysOnce() public {
         deposit(ALICE, ID1);
         vm.prank(RESOLVER);
-        escrow.confirm(ALICE, ID1);
+        escrow.confirm(ALICE, ID1, false);
         yes(status(ALICE, ID1) == LookoutEscrow.Status.Returned, "returned");
         eq(escrow.claimable(ALICE), DEPOSIT, "claimable");
         eq(escrow.totalLocked(), 0, "no longer locked");
@@ -171,24 +157,21 @@ contract LookoutEscrowTest {
         deposit(ALICE, ID1);
         vm.prank(ATTACKER);
         vm.expectRevert(LookoutEscrow.NotResolver.selector);
-        escrow.confirm(ALICE, ID1);
+        escrow.confirm(ALICE, ID1, false);
         vm.prank(ALICE); // not even the reporter
         vm.expectRevert(LookoutEscrow.NotResolver.selector);
         escrow.reject(ALICE, ID1);
         vm.prank(ATTACKER);
         vm.expectRevert(LookoutEscrow.NotResolver.selector);
         escrow.refund(ALICE, ID1);
-        vm.prank(ATTACKER);
-        vm.expectRevert(LookoutEscrow.NotResolver.selector);
-        escrow.payBounty(BID1, payable(ATTACKER));
     }
 
     function test_aDepositResolvesOnceOnly() public {
         deposit(ALICE, ID1);
         vm.startPrank(RESOLVER);
-        escrow.confirm(ALICE, ID1);
+        escrow.confirm(ALICE, ID1, false);
         vm.expectRevert(LookoutEscrow.NotLocked.selector);
-        escrow.confirm(ALICE, ID1);
+        escrow.confirm(ALICE, ID1, false);
         vm.expectRevert(LookoutEscrow.NotLocked.selector);
         escrow.reject(ALICE, ID1);
         vm.stopPrank();
@@ -197,14 +180,14 @@ contract LookoutEscrowTest {
         vm.startPrank(RESOLVER);
         escrow.reject(ALICE, ID2);
         vm.expectRevert(LookoutEscrow.NotLocked.selector);
-        escrow.confirm(ALICE, ID2);
+        escrow.confirm(ALICE, ID2, false);
         vm.stopPrank();
     }
 
     function test_aDepositThatNeverHappenedCannotBeResolved() public {
         vm.startPrank(RESOLVER);
         vm.expectRevert(LookoutEscrow.NotLocked.selector);
-        escrow.confirm(ALICE, ID1);
+        escrow.confirm(ALICE, ID1, false);
         vm.expectRevert(LookoutEscrow.NotLocked.selector);
         escrow.reject(ALICE, ID1);
         vm.stopPrank();
@@ -219,105 +202,6 @@ contract LookoutEscrowTest {
         escrow.reject(CAROL, ID2);
     }
 
-    function test_bountyIsPaidToTheStealthAddressOnceForAConfirmedReport() public {
-        fundPool();
-        deposit(ALICE, ID1);
-        vm.startPrank(RESOLVER);
-        escrow.confirm(ALICE, ID1);
-        escrow.payBounty(BID1, payable(STEALTH));
-        vm.stopPrank();
-        eq(STEALTH.balance, BOUNTY, "stealth address received the bounty");
-        eq(escrow.bountyPool(), DEPOSIT - BOUNTY, "pool paid it");
-        yes(escrow.bountyPaid(BID1), "marked paid");
-        eq(escrow.bountiesPaid(), 1, "one bounty counted");
-        solvent();
-
-        vm.prank(RESOLVER);
-        vm.expectRevert(LookoutEscrow.AlreadyPaid.selector);
-        escrow.payBounty(BID1, payable(STEALTH));
-        eq(STEALTH.balance, BOUNTY, "still only one payment");
-    }
-
-    function test_theResolverCannotPayMoreBountiesThanThereAreConfirmedReports() public {
-        fundPool();
-        deposit(ALICE, ID1);
-        deposit(BOB, ID2);
-        vm.startPrank(RESOLVER);
-        escrow.confirm(ALICE, ID1);
-        escrow.payBounty(BID1, payable(STEALTH));
-        // a different opaque id does not get a second bounty for the same single confirmation
-        vm.expectRevert(LookoutEscrow.NotConfirmed.selector);
-        escrow.payBounty(BID2, payable(STEALTH));
-        // a second confirmation earns a second bounty
-        escrow.confirm(BOB, ID2);
-        escrow.payBounty(BID2, payable(STEALTH));
-        vm.stopPrank();
-        eq(STEALTH.balance, 2 * BOUNTY, "two confirmations, two bounties");
-        eq(escrow.confirmedCount(), 2, "confirmations counted");
-        eq(escrow.bountiesPaid(), 2, "bounties counted");
-        solvent();
-    }
-
-    function test_noBountyWithoutAConfirmedReport() public {
-        fundPool();
-        deposit(ALICE, ID1);
-        vm.startPrank(RESOLVER);
-        vm.expectRevert(LookoutEscrow.NotConfirmed.selector);
-        escrow.payBounty(BID1, payable(STEALTH)); // nothing confirmed yet, the deposit is only locked
-        escrow.reject(ALICE, ID1);
-        vm.expectRevert(LookoutEscrow.NotConfirmed.selector);
-        escrow.payBounty(BID1, payable(STEALTH)); // a rejection earns no bounty
-        vm.stopPrank();
-        eq(STEALTH.balance, 0, "nothing paid");
-        eq(escrow.bountiesPaid(), 0, "none counted");
-    }
-
-    function test_theBountyNeedsAFundedPoolAndTheResolverCannotMintMoney() public {
-        deposit(ALICE, ID1);
-        vm.startPrank(RESOLVER);
-        escrow.confirm(ALICE, ID1);
-        vm.expectRevert(LookoutEscrow.PoolTooSmall.selector);
-        escrow.payBounty(BID1, payable(STEALTH));
-        vm.stopPrank();
-        // the reporter's own refund is untouched by the empty pool
-        eq(escrow.claimable(ALICE), DEPOSIT, "refund intact");
-        // a plain transfer funds the pool, and then the bounty can be paid
-        (bool ok, ) = address(escrow).call{value: BOUNTY}("");
-        yes(ok, "plain transfer accepted");
-        eq(escrow.bountyPool(), BOUNTY, "pool funded");
-        vm.prank(RESOLVER);
-        escrow.payBounty(BID1, payable(STEALTH));
-        eq(STEALTH.balance, BOUNTY, "paid");
-        solvent();
-    }
-
-    function test_theBountyCannotGoToTheZeroAddress() public {
-        fundPool();
-        deposit(ALICE, ID1);
-        vm.startPrank(RESOLVER);
-        escrow.confirm(ALICE, ID1);
-        vm.expectRevert(LookoutEscrow.ZeroAddress.selector);
-        escrow.payBounty(BID1, payable(address(0)));
-        vm.stopPrank();
-    }
-
-    function test_aRecipientThatRefusesEthDoesNotLoseTheBountyAndTheResolverCanRetry() public {
-        fundPool();
-        deposit(ALICE, ID1);
-        RefusesEth bad = new RefusesEth();
-        vm.startPrank(RESOLVER);
-        escrow.confirm(ALICE, ID1);
-        vm.expectRevert(LookoutEscrow.TransferFailed.selector);
-        escrow.payBounty(BID1, payable(address(bad)));
-        vm.stopPrank();
-        yes(!escrow.bountyPaid(BID1), "state rolled back: not marked paid");
-        eq(escrow.bountiesPaid(), 0, "state rolled back: not counted");
-        eq(escrow.bountyPool(), DEPOSIT, "pool untouched");
-        vm.prank(RESOLVER);
-        escrow.payBounty(BID1, payable(STEALTH));
-        eq(STEALTH.balance, BOUNTY, "retry to a good address works");
-    }
-
     function test_aRefundCannotBeBlockedByAReporterThatRefusesEth() public {
         // the refund is pulled, so a hostile reporter only hurts themselves and the resolver is never stuck
         RefusesEth bad = new RefusesEth();
@@ -325,44 +209,20 @@ contract LookoutEscrowTest {
         vm.prank(address(bad));
         escrow.deposit{value: DEPOSIT}(ID1);
         vm.prank(RESOLVER);
-        escrow.confirm(address(bad), ID1); // the resolver is NOT blocked
+        escrow.confirm(address(bad), ID1, false); // the resolver is NOT blocked
         eq(escrow.claimable(address(bad)), DEPOSIT, "owed, claimable when they can receive");
         solvent();
     }
 
-    function test_aRecipientThatReentersPayBountyIsStopped() public {
-        fundPool();
-        ReenteringResolver r = new ReenteringResolver();
-        LookoutEscrow e2 = new LookoutEscrow(address(r), DEPOSIT, BOUNTY, WINDOW);
-        vm.deal(ALICE, 10 ether);
-        vm.prank(ALICE);
-        e2.deposit{value: DEPOSIT}(ID1);
-        vm.prank(CAROL);
-        e2.deposit{value: DEPOSIT}(ID2);
-        // reject CAROL to fund e2's pool, confirm ALICE, then pay the bounty to the resolver contract itself
-        r.set(e2, BID1);
-        vm.startPrank(address(r));
-        e2.reject(CAROL, ID2);
-        e2.confirm(ALICE, ID1);
-        vm.stopPrank();
-        vm.expectRevert(LookoutEscrow.TransferFailed.selector); // the inner call hit the guard, so the payment as a whole fails
-        r.pay(payable(address(r)));
-        eq(e2.bountyPool(), DEPOSIT, "nothing left the pool");
-    }
-
     /* --------------------------------- refund --------------------------------- */
 
-    function test_refundReturnsTheDepositWithNoBountyAndIsNotAConfirmation() public {
+    function test_refundReturnsTheDepositWithNoBounty() public {
         fundPool();
         deposit(ALICE, ID1);
         vm.startPrank(RESOLVER);
         escrow.refund(ALICE, ID1);
-        // a refund earns nothing: there is no confirmation for a bounty to attach to
-        vm.expectRevert(LookoutEscrow.NotConfirmed.selector);
-        escrow.payBounty(BID1, payable(STEALTH));
         vm.stopPrank();
         eq(escrow.claimable(ALICE), DEPOSIT, "the deposit is claimable");
-        eq(escrow.confirmedCount(), 0, "not counted as a confirmation");
         yes(status(ALICE, ID1) == LookoutEscrow.Status.Refunded, "marked refunded");
         vm.prank(ALICE);
         escrow.claim();
@@ -380,13 +240,74 @@ contract LookoutEscrowTest {
         vm.expectRevert(LookoutEscrow.NotLocked.selector);
         escrow.refund(ALICE, ID1);
         vm.expectRevert(LookoutEscrow.NotLocked.selector);
-        escrow.confirm(ALICE, ID1);
+        escrow.confirm(ALICE, ID1, false);
         vm.expectRevert(LookoutEscrow.NotLocked.selector);
         escrow.reject(ALICE, ID1);
         vm.stopPrank();
         vm.prank(ALICE);
         vm.expectRevert(LookoutEscrow.NotLocked.selector);
         escrow.reclaim(ID1);
+    }
+
+    /* --------------------------------- bounty --------------------------------- */
+
+    function test_confirmWithBountyCreditsTheDepositPlusTheBountyFromThePool() public {
+        fundPool();
+        deposit(ALICE, ID1);
+        vm.prank(RESOLVER);
+        escrow.confirm(ALICE, ID1, true);
+        eq(escrow.claimable(ALICE), DEPOSIT + BOUNTY, "deposit and bounty are both claimable");
+        eq(escrow.bountyPool(), DEPOSIT - BOUNTY, "the pool paid the bounty");
+        solvent();
+        vm.prank(ALICE);
+        escrow.claim();
+        eq(ALICE.balance, 100 ether + BOUNTY, "Alice is back to where she started, plus the bounty");
+        solvent();
+    }
+
+    function test_confirmWithoutBountyReturnsOnlyTheDeposit() public {
+        fundPool();
+        deposit(ALICE, ID1);
+        vm.prank(RESOLVER);
+        escrow.confirm(ALICE, ID1, false);
+        eq(escrow.claimable(ALICE), DEPOSIT, "only the deposit");
+        eq(escrow.bountyPool(), DEPOSIT, "the pool is untouched");
+        solvent();
+    }
+
+    function test_anEmptyPoolDoesNotBlockTheDepositRefund() public {
+        deposit(ALICE, ID1);
+        vm.prank(RESOLVER);
+        escrow.confirm(ALICE, ID1, true); // the resolver asked for a bounty, the pool cannot afford it
+        eq(escrow.claimable(ALICE), DEPOSIT, "the reporter still gets the deposit back, and the settlement did not revert");
+        eq(escrow.bountyPool(), 0, "nothing was minted");
+        solvent();
+    }
+
+    function test_aBountyIsAtMostOnePerConfirmedReportAndNeverFromAnotherDeposit() public {
+        fundPool();
+        deposit(ALICE, ID1);
+        deposit(BOB, ID2);
+        vm.startPrank(RESOLVER);
+        escrow.confirm(ALICE, ID1, true);
+        vm.expectRevert(LookoutEscrow.NotLocked.selector);
+        escrow.confirm(ALICE, ID1, true); // the same report cannot be confirmed (and paid) twice
+        vm.stopPrank();
+        eq(escrow.claimable(ALICE), DEPOSIT + BOUNTY, "paid once");
+        eq(escrow.claimable(BOB), 0, "Bob's locked deposit is not touched by Alice's bounty");
+        eq(address(escrow).balance, escrow.totalLocked() + escrow.bountyPool() + escrow.totalClaimable(), "solvent");
+    }
+
+    function test_onlyTheResolverCanConfirmAndABountyNeverGoesToTheResolver() public {
+        fundPool();
+        deposit(ALICE, ID1);
+        vm.prank(ATTACKER);
+        vm.expectRevert(LookoutEscrow.NotResolver.selector);
+        escrow.confirm(ALICE, ID1, true);
+        eq(escrow.claimable(RESOLVER), 0, "the resolver has no claim of its own");
+        vm.prank(RESOLVER);
+        escrow.confirm(ALICE, ID1, true);
+        eq(escrow.claimable(RESOLVER), 0, "and still none after confirming");
     }
 
     /* --------------------------------- reclaim -------------------------------- */
@@ -414,11 +335,9 @@ contract LookoutEscrowTest {
         escrow.reclaim(ID1);
         vm.startPrank(RESOLVER);
         vm.expectRevert(LookoutEscrow.NotLocked.selector);
-        escrow.confirm(ALICE, ID1);
+        escrow.confirm(ALICE, ID1, false);
         vm.expectRevert(LookoutEscrow.NotLocked.selector);
         escrow.reject(ALICE, ID1);
-        vm.expectRevert(LookoutEscrow.NotConfirmed.selector);
-        escrow.payBounty(BID1, payable(STEALTH));
         vm.stopPrank();
     }
 
@@ -438,7 +357,7 @@ contract LookoutEscrowTest {
     function test_aResolvedDepositCannotBeReclaimed() public {
         deposit(ALICE, ID1);
         vm.prank(RESOLVER);
-        escrow.confirm(ALICE, ID1);
+        escrow.confirm(ALICE, ID1, false);
         vm.warp(block.timestamp + WINDOW);
         vm.prank(ALICE);
         vm.expectRevert(LookoutEscrow.NotLocked.selector);
@@ -453,7 +372,7 @@ contract LookoutEscrowTest {
         r.doDeposit{value: DEPOSIT}(ID1);
         deposit(ALICE, ID2); // other people's money sits in the escrow too
         vm.prank(RESOLVER);
-        escrow.confirm(address(r), ID1);
+        escrow.confirm(address(r), ID1, false);
         r.doClaim();
         eq(address(r).balance, DEPOSIT, "paid exactly once");
         yes(r.entered() == 1, "the payment did call back");
@@ -496,16 +415,14 @@ contract LookoutEscrowTest {
             uint256 op = (seed >> 32) % 8;
 
             if (op == 0) { vm.prank(who); try escrow.deposit{value: DEPOSIT}(id) {} catch {} }
-            else if (op == 1) { vm.prank(RESOLVER); try escrow.confirm(who, id) {} catch {} }
+            else if (op == 1) { vm.prank(RESOLVER); try escrow.confirm(who, id, false) {} catch {} }
             else if (op == 2) { vm.prank(RESOLVER); try escrow.reject(who, id) {} catch {} }
             else if (op == 3) { vm.prank(who); try escrow.claim() {} catch {} }
             else if (op == 4) { vm.prank(who); try escrow.reclaim(id) {} catch {} }
-            else if (op == 5) { vm.prank(RESOLVER); try escrow.payBounty(bytes32(uint256(uint128(id))), payable(STEALTH)) {} catch {} }
             else if (op == 6) { vm.prank(RESOLVER); try escrow.refund(who, id) {} catch {} }
             else { vm.warp(block.timestamp + ((seed >> 40) % 20 days)); }
 
             solvent();
-            yes(escrow.bountiesPaid() <= escrow.confirmedCount(), "never more bounties than confirmations");
         }
     }
 }

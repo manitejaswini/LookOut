@@ -13,8 +13,8 @@ import { escrowAbi, escrowBytecode } from './artifact.ts';
 
 /** The contract's custom errors, by name. */
 export type EscrowErrorCode =
-  | 'NotResolver' | 'Reentrant' | 'WrongAmount' | 'AlreadyExists' | 'NotLocked' | 'TooEarly' | 'NothingToClaim' | 'NotConfirmed'
-  | 'AlreadyPaid' | 'PoolTooSmall' | 'ZeroAddress' | 'BelowMinimum' | 'NotUnstaking' | 'TransferFailed' | 'BadConfig' | 'Unknown';
+  | 'NotResolver' | 'Reentrant' | 'WrongAmount' | 'AlreadyExists' | 'NotLocked' | 'TooEarly' | 'NothingToClaim'
+  | 'ZeroAddress' | 'TransferFailed' | 'BadConfig' | 'Unknown';
 
 export class EscrowError extends Error {
   code: EscrowErrorCode;
@@ -81,6 +81,8 @@ export type SettlementKind = 'confirmed' | 'rejected' | 'reclaimed' | 'refunded'
 
 export interface SettledEvent {
   kind: SettlementKind;
+  /** wei of bounty credited with a confirmation. Zero otherwise */
+  bountyWei: bigint;
   reporter: Address;
   reportId: string;
   txHash: Hex;
@@ -124,11 +126,6 @@ export function createEscrow(deps: EscrowDeps) {
     return { resolver, depositWei, bountyWei, resolveWindow: BigInt(resolveWindow) };
   }
 
-  const checkedBytes32 = (h: string): Hex => {
-    if (!/^0x[0-9a-fA-F]{64}$/.test(h)) throw new EscrowError('Unknown', 'a bounty id is 0x followed by 64 hex digits');
-    return h.toLowerCase() as Hex;
-  };
-
   const checked = (a: string): Address => {
     if (!isAddress(a)) throw new EscrowError('ZeroAddress', `not an address: ${a}`);
     return getAddress(a);
@@ -144,9 +141,6 @@ export function createEscrow(deps: EscrowDeps) {
       const [, status, lockedAt] = await read<readonly [Address, number, bigint]>('deposits', [key]);
       return { status: STATUS[status] ?? 'none', lockedAt: BigInt(lockedAt) };
     },
-    /** Has this opaque bounty id been paid? (The id is derived by the resolver from a secret, see bountyId().) */
-    bountyPaid: (bountyId: string) => read<boolean>('bountyPaid', [checkedBytes32(bountyId)]),
-    bountyCounts: async () => ({ confirmed: await read<bigint>('confirmedCount'), paid: await read<bigint>('bountiesPaid') }),
     claimable: (who: string) => read<bigint>('claimable', [checked(who)]),
     bountyPool: () => read<bigint>('bountyPool'),
     totals: async () => ({
@@ -164,10 +158,9 @@ export function createEscrow(deps: EscrowDeps) {
     claim: () => send('claim', []),
 
     /* ----- resolver (the panel service's wallet) ----- */
-    confirm: (reporter: string, reportId: string) => send('confirm', [checked(reporter), toBytes16(reportId)]),
+    /** A trusted source corroborated the report: the deposit goes back, plus a bounty from the pool when `withBounty` and the pool can pay it. */
+    confirm: (reporter: string, reportId: string, withBounty: boolean) => send('confirm', [checked(reporter), toBytes16(reportId), withBounty]),
     reject: (reporter: string, reportId: string) => send('reject', [checked(reporter), toBytes16(reportId)]),
-    /** Takes no reporter and no report id on purpose: nothing public links a bounty to a report. */
-    payBounty: (bountyId: string, stealth: string) => send('payBounty', [checkedBytes32(bountyId), checked(stealth)]),
     /** The report added nothing new or was not corroborated in time: the deposit goes back, with NO bounty. */
     refund: (reporter: string, reportId: string) => send('refund', [checked(reporter), toBytes16(reportId)]),
 
@@ -196,7 +189,7 @@ export function createEscrow(deps: EscrowDeps) {
       const out: SettledEvent[] = [];
       for (const [name, kind] of [['Confirmed', 'confirmed'], ['Rejected', 'rejected'], ['Reclaimed', 'reclaimed'], ['Refunded', 'refunded']] as const) {
         for (const l of parseEventLogs({ abi: escrowAbi, logs, eventName: name })) {
-          out.push({ kind, reporter: l.args.reporter, reportId: fromBytes16(l.args.reportId), txHash: l.transactionHash, blockNumber: l.blockNumber });
+          out.push({ kind, bountyWei: kind === 'confirmed' ? BigInt((l.args as { bounty?: bigint }).bounty ?? 0n) : 0n, reporter: l.args.reporter, reportId: fromBytes16(l.args.reportId), txHash: l.transactionHash, blockNumber: l.blockNumber });
         }
       }
       return out.sort((a, b) => (a.blockNumber === b.blockNumber ? 0 : a.blockNumber < b.blockNumber ? -1 : 1));
