@@ -146,12 +146,13 @@ try {
   check(copy.reason === 'already-flagged', 'refunded as already flagged, with no bounty', `${copy.reason} / ${copy.bounty}`);
 
   console.log('D. reputation and the stake mirror on Arkiv');
-  let stake;
-  for (let i = 0; i < 20 && val(stake?.status) !== 'returned'; i++) {
-    stake = (await deployer.publicClient.select({ status: true, amountWei: true }).from(SCHEMAS.stake).where(eq('reportId', a.reportId)).fetch()).entities[0];
-    if (val(stake?.status) !== 'returned') await sleep(4000);
+  let stakes = [];
+  for (let i = 0; i < 20 && !(stakes.length && stakes.every((x) => val(x.status) === 'returned')); i++) {
+    stakes = (await deployer.publicClient.select({ status: true }).from(SCHEMAS.stake).where(eq('reportId', a.reportId)).fetch()).entities;
+    if (!(stakes.length && stakes.every((x) => val(x.status) === 'returned'))) await sleep(4000);
   }
-  check(val(stake?.status) === 'returned', 'the Arkiv stake entity mirrors the escrow outcome', String(val(stake?.status)));
+  check(stakes.length === 1, 'exactly one Arkiv stake entity exists for the report (the mirror never duplicates)', String(stakes.length));
+  check(stakes.length > 0 && stakes.every((x) => val(x.status) === 'returned'), 'the Arkiv stake entity mirrors the escrow outcome', stakes.map((x) => String(val(x.status))).join(','));
   let repRow;
   for (let i = 0; i < 40 && !repRow; i++) {
     repRow = (await deployer.publicClient.select({ score: true, snapshotId: true }).from(SCHEMAS.reputation).where(eq('wallet', addr(reporter))).fetch()).entities[0];

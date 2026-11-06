@@ -33,6 +33,8 @@ export interface ServiceDeps {
   /** publish a reputation checkpoint at most this often, in seconds */
   checkpointEverySeconds: number;
   humans: () => ReadonlySet<string>;
+  /** see MirrorDeps.findStakes */
+  findStakes?: (reportId: string) => Promise<string[]>;
 }
 
 export interface TickReport {
@@ -58,8 +60,8 @@ export function createOperatorService(deps: ServiceDeps) {
       const latest = await deps.latestEscrowBlock();
       if (latest >= from) {
         const [deposits, settled] = [await deps.escrow.depositEvents(from, latest), await deps.escrow.settledEvents(from, latest)];
-        const d = await mirrorDeposits({ arkiv: deps.arkiv, journal }, deposits);
-        const s = await mirrorSettlements({ arkiv: deps.arkiv, journal }, settled);
+        const d = await mirrorDeposits({ arkiv: deps.arkiv, journal, findStakes: deps.findStakes }, deposits);
+        const s = await mirrorSettlements({ arkiv: deps.arkiv, journal, findStakes: deps.findStakes }, settled);
         // only move on once nothing is waiting for its deposit to be mirrored: events are never skipped, only re-read
         if (s.unknown === 0) journal.mark(CURSOR, (latest + 1n).toString());
         out.mirrored = { deposits: d.created, settlements: s.updated, waiting: s.unknown };

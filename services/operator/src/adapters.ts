@@ -99,3 +99,12 @@ export function arkivEvidenceSource(publicClient: AnyPublicClient, registry: Reg
     },
   };
 }
+
+/** The `stake` entities this wallet already created for a report, so the mirror never writes a second one. */
+export function arkivStakeFinder(publicClient: AnyPublicClient, creator: string) {
+  const me = creator.toLowerCase();
+  return async (reportId: string): Promise<string[]> => {
+    const rows = await readAll(publicClient, SCHEMAS.stake, { reportId: true }, eq('reportId', reportId));
+    return rows.filter((e) => String(e.$creator).toLowerCase() === me).map((e) => String(e.$key).toLowerCase()).sort();
+  };
+}

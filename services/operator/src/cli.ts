@@ -23,7 +23,7 @@ import { caseIdFor, targetHash } from '@lookout/core';
 import { createEscrow } from '@lookout/escrow';
 import { loadRegistry } from '@lookout/indexer';
 import { HUMAN_ACTION, SqliteSeatStore } from '@lookout/worldid';
-import { arkivEvidenceSource, arkivReportSource } from './adapters.ts';
+import { arkivEvidenceSource, arkivReportSource, arkivStakeFinder } from './adapters.ts';
 import { sqliteJournal } from './journal.ts';
 import { addEvents } from './checkpoint-job.ts';
 import { listDisputes } from './reports.ts';
@@ -80,6 +80,7 @@ const service = createOperatorService({
   planPorts: { deposit: (reporter, reportId) => escrow.deposit(reporter, reportId) },
   escrow, escrowFromBlock: BigInt(process.env.ESCROW_DEPLOY_BLOCK ?? 0), latestEscrowBlock: () => sepoliaPublic.getBlockNumber(),
   arkiv: writer as EntityWriter & TrustWriter, now, checkpointEverySeconds: demo ? 120 : 3600, humans,
+  findStakes: arkivStakeFinder(arkivPublic, account.address),
 });
 
 const [command] = positional;

@@ -193,3 +193,29 @@ test('API: reports and disputes are listed read-only and filterable by report id
     server.close();
   }
 });
+
+/* ---------- the stake mirror never writes a duplicate ---------- */
+
+import { mirrorDeposits, mirrorSettlements } from './mirror.ts';
+
+test('MIRROR: if Arkiv already holds a stake for the report (an earlier write that timed out), none is created, and it is journaled', async () => {
+  const { w, journal } = rig();
+  const arkiv = { async createEntity() { w.created.push({ extra: true }); return { entityKey: '0xnew', txHash: TX, expiresAt: 0 }; }, async extendEntity() { return { expiresAt: 0 }; }, async patchEntity() {} };
+  const dep = { reporter: REPORTER as `0x${string}`, reportId: '7'.repeat(32), amount: 10n ** 15n, txHash: TX as `0x${string}`, blockNumber: 1n };
+  const r = await mirrorDeposits({ arkiv, journal, findStakes: async () => ['0x' + 'aa'.repeat(32)] }, [dep]);
+  assert.deepEqual(r, { created: 0, skipped: 1 });
+  assert.equal(w.created.length, 0, 'no second entity');
+  assert.equal(journal.detail(`stake:${REPORTER}:${'7'.repeat(32)}`), '0x' + 'aa'.repeat(32), 'the existing one is remembered');
+});
+
+test('MIRROR: a settlement updates EVERY stake entity for the report, so a duplicate cannot stay "locked"', async () => {
+  const { journal } = rig();
+  const patched: string[] = [];
+  const arkiv = { async createEntity() { return { entityKey: '0xnew', txHash: TX, expiresAt: 0 }; }, async extendEntity() { return { expiresAt: 0 }; }, async patchEntity(_s: unknown, key: string) { patched.push(key); } };
+  const id = '8'.repeat(32);
+  journal.mark(`stake:${REPORTER}:${id}`, '0x' + '01'.repeat(32));
+  const ev = { kind: 'confirmed' as const, bountyWei: 0n, reporter: REPORTER as `0x${string}`, reportId: id, txHash: TX as `0x${string}`, blockNumber: 2n };
+  const r = await mirrorSettlements({ arkiv, journal, findStakes: async () => ['0x' + '01'.repeat(32), '0x' + '02'.repeat(32)] }, [ev]);
+  assert.equal(r.updated, 1);
+  assert.deepEqual([...patched].sort(), ['0x' + '01'.repeat(32), '0x' + '02'.repeat(32)]);
+});
