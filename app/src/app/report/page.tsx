@@ -17,12 +17,11 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
             <h2>Report a scam, with skin in the game.</h2>
             <p className="mono-label">Reporters</p>
             <p className="lede-sm">
-              Anyone can report. A small deposit goes into escrow, so spam costs money. If a trusted source (a feed or the checker) later flags the same target, your report is confirmed and you get the deposit back,
-              earn reputation, and may be paid a bounty to a one-time address. The payment on chain does not name you or your report, though timing can still hint at a link. If it is rejected, the deposit funds the bounty pool.
+              Anyone can report. A small deposit goes into escrow, so spam costs money. If a trusted source (a feed or the checker) later flags the same target, your report is confirmed: you get the deposit back, earn reputation, and a verified human is also paid a bounty. If nobody corroborates it, the deposit is refunded with no bounty. Only an explicit operator ruling that the report is false forfeits it.
             </p>
             <ul className="why-list">
               <li><b>Reports alone never block.</b> A new wallet weighs nothing. Blocking needs independent strong signals or an operator ruling.</li>
-              <li><b>Your wallet signs.</b> We never hold a key. Two approvals: the deposit, then the report.</li>
+              <li><b>Your wallet signs.</b> We never hold a key. Two approvals: the deposit on Sepolia, then the report on Arkiv.</li>
               <li><b>Testnet.</b> Deposits are test ETH on Sepolia and reports go to the Arkiv testnet.</li>
             </ul>
           </div>

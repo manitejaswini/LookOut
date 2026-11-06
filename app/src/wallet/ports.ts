@@ -1,5 +1,5 @@
 import { createWalletClient as createArkivWalletClient } from '@arkiv-network/sdk';
-import { createPublicClient, createWalletClient, custom, http, parseEther, type PublicClient } from 'viem';
+import { createPublicClient, createWalletClient, custom, fallback, parseEther, type PublicClient } from 'viem';
 import { createAttestation, createReport, newReportId, type EntityWriter } from '@lookout/arkiv';
 import { CONFIG, encodeReportPayload } from '@lookout/core';
 import { rememberReport } from './reports-store';
@@ -8,7 +8,7 @@ import type { DisputePorts } from '../flows/dispute-flow';
 import type { FundsPorts } from '../flows/funds-flow';
 import type { PaymentRecord, SendPorts } from '../flows/pay-flow';
 import type { ReportPorts } from '../flows/report-flow';
-import { ARKIV_CHAIN, ESCROW_ADDRESS, ESCROW_CHAIN, escrowConfigured } from './chains';
+import { ARKIV_CHAIN, ESCROW_ADDRESS, ESCROW_CHAIN, escrowConfigured, sepoliaReadTransport } from './chains';
 import type { WalletState } from './WalletProvider';
 
 /**
@@ -28,7 +28,8 @@ const arkivClient = (w: WalletState) =>
 
 export function escrowFor(w: WalletState) {
   if (!escrowConfigured) throw new Error('the escrow contract is not deployed yet (NEXT_PUBLIC_ESCROW_ADDRESS is not set)');
-  const publicClient = createPublicClient({ chain: ESCROW_CHAIN, transport: http() }) as PublicClient;
+  // reads go through the wallet's own RPC first (it is already connected and not rate limited), then the public endpoints
+  const publicClient = createPublicClient({ chain: ESCROW_CHAIN, transport: fallback([custom(w.provider()), sepoliaReadTransport()]) }) as PublicClient;
   const walletClient = createWalletClient({ chain: ESCROW_CHAIN, transport: custom(w.provider()), account: needAddress(w) });
   return createEscrow({ address: ESCROW_ADDRESS as `0x${string}`, publicClient, walletClient });
 }
@@ -83,7 +84,7 @@ export function payPorts(w: WalletState): SendPorts {
 }
 
 export async function ethBalance(address: `0x${string}`): Promise<bigint> {
-  return createPublicClient({ chain: ESCROW_CHAIN, transport: http() }).getBalance({ address });
+  return createPublicClient({ chain: ESCROW_CHAIN, transport: sepoliaReadTransport() }).getBalance({ address });
 }
 
 /* ---------------------------------- disputes ---------------------------------- */
@@ -106,7 +107,7 @@ export function disputePorts(w: WalletState): DisputePorts {
 
 /** Reads what the escrow holds for this wallet. Reads need no signature. */
 export function fundsPorts(): FundsPorts {
-  const publicClient = createPublicClient({ chain: ESCROW_CHAIN, transport: http() }) as PublicClient;
+  const publicClient = createPublicClient({ chain: ESCROW_CHAIN, transport: sepoliaReadTransport() }) as PublicClient;
   const escrow = createEscrow({ address: ESCROW_ADDRESS as `0x${string}`, publicClient });
   return {
     claimable: (a) => escrow.claimable(a),
