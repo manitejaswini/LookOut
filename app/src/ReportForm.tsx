@@ -120,7 +120,11 @@ export default function ReportForm({ initialKind, initialValue }: { initialKind?
           <div className="verdict-head"><span className="verdict-tag">REPORT POSTED</span></div>
           <p className="verdict-line">Your report is on Arkiv and the deposit is locked.</p>
           <p className="tiny">Report id <code>{done.reportId}</code></p>
-          <p className="tiny">Deposit transaction <code>{short(done.depositTx)}</code> · entity <code>{short(done.entityKey)}</code></p>
+          <p className="tiny">
+            Deposit transaction <a href={`https://sepolia.etherscan.io/tx/${done.depositTx}`} target="_blank" rel="noreferrer"><code>{short(done.depositTx)}</code></a>
+            {' '}· Arkiv record <a href={`https://rabdi.explorer.arkiv.network/entity/${done.entityKey}`} target="_blank" rel="noreferrer"><code>{short(done.entityKey)}</code></a>
+          </p>
+          <p className="tiny">Next: when a trusted source flags the same target, your report is confirmed and the deposit becomes claimable on the <a href="/funds">Funds</a> page.</p>
         </div>
       )}
     </div>
