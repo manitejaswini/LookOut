@@ -54,7 +54,8 @@ a { color: inherit; }
 .topbar {
   position: sticky; top: 0; z-index: 10;
   display: flex; justify-content: space-between; align-items: center;
-  padding: 14px var(--gutter);
+  height: 48px;
+  padding: 0 var(--gutter);
   background: rgba(255, 255, 255, 0.92);
   backdrop-filter: blur(6px);
   border-bottom: 1px solid var(--line);
@@ -218,3 +219,9 @@ footer { margin-top: 40px; }
   .flow li p { grid-column: 2; }
   .topbar nav { display: none; }
 }
+
+/* ---------- nav extras ---------- */
+.topbar nav a[aria-current="page"] { text-decoration: underline; text-underline-offset: 4px; }
+.topbar nav .nav-pitch { background: var(--neon); padding: 4px 10px; }
+.topbar nav { align-items: center; }
+

@@ -5,18 +5,9 @@ import Explorer from '../Explorer';
 import Agent from '../Agent';
 import { FLOW, STATS } from '../mock';
 
-const NAV = [['check', 'Check'], ['attack', 'Attack'], ['explorer', 'Explorer'], ['agent', 'Agent'], ['how', 'How it works']];
-
 export default function Home() {
   return (
     <>
-      <header className="topbar">
-        <a href="#top" className="logo"><span className="logo-px" aria-hidden="true" />LOOKOUT</a>
-        <nav>
-          {NAV.map(([id, label]) => <a key={id} href={`#${id}`}>{label}</a>)}
-        </nav>
-      </header>
-
       <main id="top">
         <section className="hero">
           <h1>LOOK OUT,<br />BEFORE YOU SIGN.</h1>
