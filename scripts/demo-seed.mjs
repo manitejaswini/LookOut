@@ -24,7 +24,8 @@ if (!ARKIV_ACCESS_KEY || !ARKIV_PRIVATE_KEY) {
 }
 
 const DOMAIN = 'lookout-demo-airdrop.example';
-const hash = targetHash('domain', DOMAIN);
+// a reserved-looking address (0xbad0...0001) that belongs to nobody, for the Pay page demo: paying it shows a flag
+const DEMO_ADDRESS = '0xbad0000000000000000000000000000000000001';
 const everyArg = process.argv.indexOf('--every');
 const everyMin = everyArg > -1 ? Number(process.argv[everyArg + 1]) : 0;
 if (everyArg > -1 && !(everyMin >= 1)) { console.error('--every needs a number of minutes (1 or more)'); process.exit(1); }
@@ -32,7 +33,7 @@ if (everyArg > -1 && !(everyMin >= 1)) { console.error('--every needs a number o
 const { address, publicClient, writer } = createArkivClients({ accessKey: ARKIV_ACCESS_KEY, privateKey: ARKIV_PRIVATE_KEY });
 const mine = (e) => String(e.$creator).toLowerCase() === address.toLowerCase();
 
-async function find(kind, extra = (e) => true) {
+async function find(kind, hash, extra = (e) => true) {
   // only a verdict has a sourceId column, and the SDK refuses to select a column the schema does not have
   const select = kind === 'verdict' ? { $key: true, $creator: true, sourceId: true } : { $key: true, $creator: true };
   const { entities } = await publicClient.select(select).from(SCHEMAS[kind]).where(eq('targetHash', hash)).fetch();
@@ -51,20 +52,26 @@ async function ensure(label, kind, lookup, create) {
   }
 }
 
-async function run() {
-  console.log(`[${new Date().toISOString()}] demo fixtures for ${DOMAIN} (wallet ${address.slice(0, 8)}…)`);
-  await ensure('report (community)', 'report', () => find('report'),
-    () => createReport(writer, { kind: 'domain', value: DOMAIN, category: 'drainer' }));
-  await ensure('verdict (lookout-checker)', 'verdict', () => find('verdict', (e) => e.sourceId?.value === 'lookout-checker'),
+async function seed(kind, value) {
+  const hash = targetHash(kind, value);
+  console.log(`[${new Date().toISOString()}] demo fixtures for ${value} (wallet ${address.slice(0, 8)}…)`);
+  await ensure('report (community)', 'report', () => find('report', hash),
+    () => createReport(writer, { kind, value, category: 'drainer' }));
+  await ensure('verdict (lookout-checker)', 'verdict', () => find('verdict', hash, (e) => e.sourceId?.value === 'lookout-checker'),
     () => createVerdict(writer, {
-      kind: 'domain', value: DOMAIN, sourceType: 'checker', sourceId: 'lookout-checker', level: 'block',
+      kind, value, sourceType: 'checker', sourceId: 'lookout-checker', level: 'block',
       proofHash: `0x${'11'.repeat(32)}`, reason: 'DEMO FIXTURE: stands in for a bytecode match, not a real finding',
     }));
-  await ensure('verdict (openfeed-demo)', 'verdict', () => find('verdict', (e) => e.sourceId?.value === 'openfeed-demo'),
+  await ensure('verdict (openfeed-demo)', 'verdict', () => find('verdict', hash, (e) => e.sourceId?.value === 'openfeed-demo'),
     () => createVerdict(writer, {
-      kind: 'domain', value: DOMAIN, sourceType: 'feed', sourceId: 'openfeed-demo', level: 'block',
+      kind, value, sourceType: 'feed', sourceId: 'openfeed-demo', level: 'block',
       reason: 'DEMO FIXTURE: stands in for an open feed listing, not a real list',
     }));
+}
+
+async function run() {
+  await seed('domain', DOMAIN);
+  await seed('address', DEMO_ADDRESS);
 }
 
 await run();

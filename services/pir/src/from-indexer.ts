@@ -7,14 +7,14 @@
 // the second operator rather than running this twice (two syncs can land on different blocks and differ).
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { Store, buildEpochSnapshot, loadRegistry, loadState } from '@lookout/indexer';
+import { Store, buildEpochSnapshot, defaultDbPath, loadRegistry, loadState } from '@lookout/indexer';
 import { saveSnapshot } from './store.ts';
 
 const arg = (flag: string, fallback: string) => {
   const i = process.argv.indexOf(flag);
   return i > -1 ? process.argv[i + 1] : fallback;
 };
-const db = arg('--db', process.env.INDEXER_DB ?? fileURLToPath(new URL('../../indexer/data/index.sqlite', import.meta.url)));
+const db = arg('--db', process.env.INDEXER_DB ?? defaultDbPath());
 const out = arg('--out', fileURLToPath(new URL('../data', import.meta.url)));
 
 if (!existsSync(db)) {

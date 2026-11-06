@@ -19,10 +19,10 @@ const STEP_TEXT: Record<ReportStep, string> = {
   done: 'Done.',
 };
 
-export default function ReportForm() {
+export default function ReportForm({ initialKind, initialValue }: { initialKind?: TargetKind; initialValue?: string }) {
   const wallet = useWallet();
-  const [kind, setKind] = useState<TargetKind>('domain');
-  const [value, setValue] = useState('');
+  const [kind, setKind] = useState<TargetKind>(initialKind ?? 'domain');
+  const [value, setValue] = useState(initialValue ?? '');
   const [category, setCategory] = useState<Category>('drainer');
   const [step, setStep] = useState<ReportStep | null>(null);
   const [busy, setBusy] = useState(false);

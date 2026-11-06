@@ -60,13 +60,16 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     setAvailable(!!eth);
     if (!eth) return setReady(true);
     // eth_accounts does not prompt: it only returns accounts the person already approved for this site
+    // a locked or slow wallet can leave these requests pending forever, so the page must not wait on them
+    const giveUp = window.setTimeout(() => setReady(true), 1500);
     eth.request({ method: 'eth_accounts' }).then((a) => setAddress(((a as string[])[0]?.toLowerCase() as `0x${string}`) ?? null)).catch(() => {});
-    eth.request({ method: 'eth_chainId' }).then((c) => setChainId(toChainId(c))).catch(() => {}).finally(() => setReady(true));
+    eth.request({ method: 'eth_chainId' }).then((c) => setChainId(toChainId(c))).catch(() => {}).finally(() => { window.clearTimeout(giveUp); setReady(true); });
     const onAccounts = (a: string[]) => setAddress((a[0]?.toLowerCase() as `0x${string}`) ?? null);
     const onChain = (c: string) => setChainId(toChainId(c));
     eth.on?.('accountsChanged', onAccounts as never);
     eth.on?.('chainChanged', onChain as never);
     return () => {
+      window.clearTimeout(giveUp);
       eth.removeListener?.('accountsChanged', onAccounts as never);
       eth.removeListener?.('chainChanged', onChain as never);
     };

@@ -1,7 +1,15 @@
 import { mkdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { BlockTiming, IndexedKind, RawRow, StoredEntity } from './types.ts';
+
+/**
+ * Where the cache lives unless INDEXER_DB says otherwise: OUTSIDE the repository. The cache is rewritten on every sync
+ * (every 30 s under `indexer:serve`), and a dev server that watches the repo sees each write as a code change and reloads
+ * the page over and over. It is also machine-local data that has no business inside the project folder.
+ */
+export const defaultDbPath = (): string => join(process.env.LOOKOUT_DATA_DIR ?? join(homedir(), '.lookout'), 'indexer', 'index.sqlite');
 
 /**
  * A local SQLite cache of what the indexer read from Arkiv. It is derived data: delete the file and the
