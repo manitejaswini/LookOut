@@ -1,0 +1,24 @@
+{
+  "name": "@lookout/pir-server",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "scripts": {
+    "test": "node --test \"src/**/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "start": "node src/cli.ts",
+    "demo": "node src/demo.ts"
+  },
+  "dependencies": {
+    "@lookout/core": "*",
+    "@lookout/pir": "*",
+    "@lookout/snapshot": "*",
+    "@noble/hashes": "^2.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2",
+    "@lookout/client": "*"
+  }
+}

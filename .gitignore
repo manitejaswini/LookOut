@@ -5,3 +5,4 @@ dist
 .env.*
 *.sqlite
 *.tsbuildinfo
+services/pir/data
