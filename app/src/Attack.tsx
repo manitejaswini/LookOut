@@ -2,17 +2,13 @@
 
 import { useMemo, useState } from 'react';
 import { CONFIG } from '@lookout/core';
-import { fakeReports, scoreTarget } from '@lookout/core';
-import { TARGETS } from './mock';
-
-const legit = TARGETS.find((t) => t.value === 'orbit-bridge.app')!;
+import { simulateSybil } from '@lookout/core';
 
 export default function Attack() {
   const [n, setN] = useState(1000);
   const [rep, setRep] = useState(0);
 
-  const result = useMemo(() => scoreTarget({ ...legit, disputed: false, signals: fakeReports(n, rep) }), [n, rep]);
-  const community = result.typeScores.community ?? 0;
+  const result = useMemo(() => simulateSybil(n, rep), [n, rep]);
 
   return (
     <section id="attack" className="section">
@@ -45,10 +41,10 @@ export default function Attack() {
           </div>
 
           <div className="calc">
-            <div><span className="mono-label">Community type score</span><b>{community.toFixed(2)}</b></div>
+            <div><span className="mono-label">Community type score</span><b>{result.communityScore.toFixed(2)}</b></div>
             <div><span className="mono-label">Strong types</span><b>{result.strongTypes} / {CONFIG.MIN_STRONG_TYPES} needed</b></div>
             <div><span className="mono-label">Verdict</span><b className={`pill v-${result.verdict}`}>{result.verdict.toUpperCase()}</b></div>
-            <div><span className="mono-label">Deposits at risk</span><b>{(n * CONFIG.DEPOSIT_ETH).toFixed(2)} ETH</b></div>
+            <div><span className="mono-label">Deposits at risk</span><b>{result.depositsAtRiskEth.toFixed(2)} ETH</b></div>
           </div>
           <p className="tiny">
             Residual risk: the attacker burns money to annoy with warnings. Even at full reputation, one source type alone can never block.
