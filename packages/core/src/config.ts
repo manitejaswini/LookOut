@@ -3,6 +3,14 @@ export const CONFIG = {
   THRESHOLD: 0.5, // a source type counts as "strong" at or above this score
   MIN_STRONG_TYPES: 2, // block needs this many strong, different source types
   REP_CAP: 100, // reputation at which a report reaches weight 1
+
+  // Reputation updates (reputation.ts). Non-transferable, decays, a rejection costs twice a confirmation.
+  REP_CONFIRM_GAIN: 10, // a confirmed report
+  REP_REJECT_MULTIPLIER: 2, // a rejected report costs this many times the gain
+  REP_JUROR_WIN: 2, // voted with the majority
+  REP_JUROR_LOSS: 4, // voted against the majority, or did not reveal
+  REP_HALF_LIFE_DAYS: 30, // an unrefreshed score halves this often
+  REP_MAX: 1000, // scores stop here (weight stops at REP_CAP anyway)
   REPORT_EXPIRY_HOURS: 24,
   DEPOSIT_ETH: 0.01,
 

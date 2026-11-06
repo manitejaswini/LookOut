@@ -8,3 +8,4 @@ export * from './lookup.ts';
 export * from './entities.ts';
 export * from './publish.ts';
 export * from './server.ts';
+export * from './checkpoint.ts';

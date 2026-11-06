@@ -155,13 +155,13 @@ A reviewer's hidden vote, then its reveal. Not `readonly`, because the reveal is
 | Column | Type | Idx | Notes |
 | --- | --- | --- | --- |
 | `caseId` | `str` | yes | |
-| `commitHash` | `str` | no | `keccak256(outcome + salt + reviewer)`, set at creation |
+| `commitHash` | `str` | no | `keccak256("lookout.vote.v0:" caseId ":" outcome ":" salt ":" juror)`, set at creation (core/vote.ts) |
 | `outcome` | `str` optional | no | set at reveal with `patchEntity` |
 | `salt` | `str` optional | no | set at reveal |
 
 - **Authorized writer:** a reviewer drawn for that case.
 - **Lifetime:** end of round plus a grace period.
-- **Rule:** a reveal counts only if `keccak256(outcome + salt + $creator) == commitHash`. Votes that are never revealed are ignored. Because a patch overwrites the entity, the `commitHash` attribute stays untouched and is the audit trail.
+- **Rule:** a reveal counts only if the commitment formula above, with `juror = $creator`, equals `commitHash`. Votes that are never revealed are ignored. Because a patch overwrites the entity, the `commitHash` attribute stays untouched and is the audit trail.
 
 ### `lookout.v0.ruling`
 
@@ -172,7 +172,7 @@ The outcome of a reviewer case. Flag: `readonly`.
 | `caseId` | `str` | yes | |
 | `targetHash` | `str` | yes | |
 | `outcome` | `str` | yes | `block` or `clear` |
-| `payload` | `bytes` optional | no | juror list and the vote tally |
+| `payload` | `bytes` optional | no | JSON: the draw `seed`, the `jurors`, `counts`, `winners`, `losers`, `nonReveal` (services/panel/src/settle.ts `rulingPayload`) |
 
 - **Authorized writer:** the panel service wallet.
 - **Lifetime:** 90 days (3,888,000 blocks).

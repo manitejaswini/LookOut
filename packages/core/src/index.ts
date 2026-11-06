@@ -4,3 +4,6 @@ export * from './scoring.ts';
 export * from './target.ts';
 export * from './attack.ts';
 export * from './snapshot.ts';
+export * from './vote.ts';
+export * from './reputation.ts';
+export * from './panel.ts';

@@ -29,13 +29,13 @@ export interface WriteResult {
   expiresAt: string;
 }
 
-const HEX32 = /^0x[0-9a-f]{64}$/;
+export const HEX32 = /^0x[0-9a-f]{64}$/;
 const REPORT_ID = /^[0-9a-f]{32}$/;
 const MAX_STR_BYTES = 128;
 
 const utf8Length = (s: string) => new TextEncoder().encode(s).length;
 
-function oneOf<T extends string>(name: string, value: string, allowed: readonly T[]): T {
+export function oneOf<T extends string>(name: string, value: string, allowed: readonly T[]): T {
   if (!(allowed as readonly string[]).includes(value)) throw new Error(`${name} must be one of ${allowed.join(', ')}, got "${value}"`);
   return value as T;
 }
@@ -46,14 +46,14 @@ function target(kind: TargetKind, value: string) {
   return { normalized: normalizeTarget(kind, value), hash: targetHash(kind, value) };
 }
 
-const result = (r: { entityKey: string; txHash: string; expiresAt: bigint | number | string }): WriteResult => ({
+export const result = (r: { entityKey: string; txHash: string; expiresAt: bigint | number | string }): WriteResult => ({
   entityKey: r.entityKey,
   txHash: r.txHash,
   expiresAt: String(r.expiresAt),
 });
 
 /** drops keys whose value is undefined, so optional columns are simply left out */
-const defined = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
+export const defined = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
 
 /* ---------- snapshot ---------- */
 

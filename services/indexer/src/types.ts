@@ -1,5 +1,5 @@
-/** The entity kinds an indexer reads. `stake`, `vote`, `reputation`, `snapshot` and `bounty` are not needed to build signals yet. */
-export const INDEXED_KINDS = ['report', 'verdict', 'attestation', 'ruling'] as const;
+/** The entity kinds an indexer reads. `stake`, `vote`, `snapshot` and `bounty` are not needed to build signals yet. */
+export const INDEXED_KINDS = ['report', 'verdict', 'attestation', 'ruling', 'reputation'] as const;
 export type IndexedKind = (typeof INDEXED_KINDS)[number];
 
 /** One entity as read from Arkiv, with column values flattened to plain strings. */

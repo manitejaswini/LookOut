@@ -2,6 +2,7 @@ import { normalizeTarget, scoreTarget, targetHash, type CheckResult, type Target
 import { buildTargets, toScoringInput, type Dropped, type TargetView } from './signals.ts';
 import { epochOf, inEpoch } from './snapshot.ts';
 import type { Registry } from './registry.ts';
+import { withCheckpoint } from './checkpoint.ts';
 import type { BlockTiming, StoredEntity } from './types.ts';
 import type { Store } from './store.ts';
 
@@ -26,8 +27,11 @@ export interface IndexState {
  * working, but such a snapshot cannot be relied on to match another indexer's. Re-sync to get the exact timestamp.
  */
 export function buildIndexState(
-  entities: StoredEntity[], timing: BlockTiming, epoch: BlockTiming | null, registry: Registry, syncedAt = 0,
+  allEntities: StoredEntity[], timing: BlockTiming, epoch: BlockTiming | null, baseRegistry: Registry, syncedAt = 0,
 ): IndexState {
+  // reputation comes from the published checkpoint when there is one, and those rows are not about a target
+  const registry = withCheckpoint(baseRegistry, allEntities);
+  const entities = allEntities.filter((x) => x.kind !== 'reputation');
   const { targets, dropped } = buildTargets(entities, timing, registry);
   const e = epoch ?? {
     currentBlock: epochOf(timing.currentBlock),
