@@ -23,6 +23,7 @@
     "verify": "npm run typecheck && npm test && npm run attack",
     "indexer:publish": "npm run publish -w @lookout/indexer",
     "demo:seed": "node scripts/demo-seed.mjs",
-    "arkiv:trust-smoke": "node scripts/arkiv-trust-smoke.mjs"
+    "arkiv:trust-smoke": "node scripts/arkiv-trust-smoke.mjs",
+    "escrow:deploy": "node scripts/deploy-escrow.mjs"
   }
 }
