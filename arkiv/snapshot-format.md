@@ -100,6 +100,15 @@ Each indexer publishes a `lookout.v0.snapshot` entity (see `arkiv/schema.md`) wi
 
 Several independent indexers publish a root for the same `snapshotId`. A client accepts a table only if its computed root equals one of those published roots, and it should prefer the one most indexers agree on.
 
+Implemented: `npm run indexer:publish` (`services/indexer/src/publish.ts`). It refuses to publish unless the wallet is listed under `indexers` in `services/indexer/registry.json`, does nothing if the same root is already there, and refuses to publish a **different** root for the same snapshot id (an indexer must not contradict itself).
+
+How a client decides to believe a table (`packages/arkiv/src/roots.ts`, browser-safe, import as `@lookout/arkiv/roots`):
+1. read every `snapshot` entity for the snapshot id from Arkiv, with no access key (a key would identify the visitor);
+2. keep only rows whose `$creator` is the registered wallet **for that same `indexerId`**: an impostor using a trusted id from another wallet, and a trusted wallet using another indexer's id, are both ignored;
+3. accept a root only if at least `minIndexers` different trusted indexers published it. The default is 1; raise it once a second independent indexer exists. One indexer publishing twice counts once.
+
+If Arkiv does not vouch for the table, the lookup **fails**. It does not fall back to an unverified answer. The wallet page can be told to skip the check with `NEXT_PUBLIC_PIR_VERIFY=off`, and then it shows UNVERIFIED.
+
 ## PIR server endpoints
 
 Both servers hold the same table and expose the same endpoints (PRD "PIR server endpoints", with the encoding made precise):

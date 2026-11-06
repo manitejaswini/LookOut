@@ -14,7 +14,8 @@
     "sync": "node src/cli.ts sync",
     "serve": "node src/cli.ts serve",
     "lookup": "node src/cli.ts lookup",
-    "snapshot": "node src/cli.ts snapshot"
+    "snapshot": "node src/cli.ts snapshot",
+    "publish": "node src/cli.ts publish"
   },
   "dependencies": {
     "@lookout/arkiv": "*",

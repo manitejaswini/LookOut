@@ -48,3 +48,16 @@ test('the committed registry.json parses and lists the demo checker and feed', (
   assert.deepEqual(r.attesters, [], 'no attester is honoured until proof of control exists');
   assert.equal(r.panel, null);
 });
+
+test('indexers: parsed with lowercase addresses, and optional (an old registry file still loads)', () => {
+  const reg = parseRegistry({ indexers: [{ indexerId: 'idx-1', address: '0x37324A0CC17959Ee99233c8552e741519983573E' }] });
+  assert.deepEqual(reg.indexers, [{ indexerId: 'idx-1', address: '0x37324a0cc17959ee99233c8552e741519983573e' }]);
+  assert.deepEqual(parseRegistry({}).indexers, []);
+});
+
+test('indexers: duplicate ids, bad ids and bad addresses are refused', () => {
+  const a = '0x37324A0CC17959Ee99233c8552e741519983573E';
+  assert.throws(() => parseRegistry({ indexers: [{ indexerId: 'x', address: a }, { indexerId: 'x', address: a }] }), /duplicate indexerId/);
+  assert.throws(() => parseRegistry({ indexers: [{ indexerId: 'Bad Id', address: a }] }), /indexerId/);
+  assert.throws(() => parseRegistry({ indexers: [{ indexerId: 'x', address: '0x123' }] }), /address/);
+});
