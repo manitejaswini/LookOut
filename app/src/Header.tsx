@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import ConnectButton from './ConnectButton';
 
 const NAV: [string, string][] = [
   ['/#check', 'Check'],
@@ -9,7 +10,9 @@ const NAV: [string, string][] = [
   ['/#explorer', 'Explorer'],
   ['/#agent', 'Agent'],
   ['/#how', 'How it works'],
+  ['/report', 'Report'],
   ['/reviewer', 'Join panel'],
+  ['/vote', 'Vote'],
   ['/pitch/arkiv', 'Arkiv pitch'],
   ['/pitch/ef', 'EF pitch'],
   ['/pitch/worldid', 'World ID pitch'],
@@ -27,6 +30,7 @@ export default function Header() {
           </Link>
         ))}
       </nav>
+      <ConnectButton />
     </header>
   );
 }

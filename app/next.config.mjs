@@ -10,7 +10,7 @@ const trustedIndexers = (registry.indexers ?? []).map((i) => ({ indexerId: i.ind
 const nextConfig = {
   reactStrictMode: true,
   // workspace packages are shipped as TypeScript source
-  transpilePackages: ['@lookout/core', '@lookout/client', '@lookout/arkiv', '@lookout/pir', '@lookout/worldid'],
+  transpilePackages: ['@lookout/core', '@lookout/client', '@lookout/arkiv', '@lookout/pir', '@lookout/worldid', '@lookout/escrow'],
   env: { NEXT_PUBLIC_TRUSTED_INDEXERS: JSON.stringify(trustedIndexers), NEXT_PUBLIC_SOURCES: JSON.stringify(sourceNames) },
 };
 export default nextConfig;

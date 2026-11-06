@@ -7,7 +7,9 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./roots": "./src/roots.ts"
+    "./roots": "./src/roots.ts",
+    "./writers": "./src/writers.ts",
+    "./trust-writers": "./src/trust-writers.ts"
   },
   "scripts": {
     "test": "node --test \"src/**/*.test.ts\"",

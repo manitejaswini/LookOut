@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useWallet } from './wallet/WalletProvider';
 import { IDKitErrorCodes, IDKitRequestWidget, proofOfHuman, type RpContext } from '@worldcoin/idkit';
 
 /**
@@ -48,7 +49,11 @@ const SETUP_CODES: ReadonlySet<string> = new Set([
 
 export default function ReviewerJoin() {
   const [status, setStatus] = useState<Status>({ state: 'loading' });
-  const [wallet, setWallet] = useState('');
+  const connected = useWallet();
+  const [typed, setTyped] = useState('');
+  // a connected wallet fills the field. Typing still works, for a wallet that is not in this browser
+  const wallet = typed || connected.address || '';
+  const setWallet = setTyped;
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [request, setRequest] = useState<SignedRequest | null>(null);
@@ -156,7 +161,7 @@ export default function ReviewerJoin() {
         </button>
       </form>
       <p className="tiny">
-        The proof is tied to this address, so it cannot be reused for another wallet. Wallet connection comes later; for now, paste the address.
+        The proof is tied to this address, so it cannot be reused for another wallet. Connect your wallet in the top bar to fill this in, or paste an address.
       </p>
 
       {request && (
