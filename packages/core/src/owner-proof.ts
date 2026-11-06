@@ -65,3 +65,15 @@ export function verifyOwnerProof(dispute: { targetHash: string; creator: string 
   if (dispute.creator.toLowerCase() !== signer) return { ok: false, reason: 'the dispute was not written by the signer' };
   return { ok: true, address: signer };
 }
+
+/**
+ * Proof that the person verifying as a human controls the wallet they name. World ID binds the proof to the wallet's address
+ * (the signal), but nothing in it shows the person holds that wallet's key. This signature does, so nobody can register a wallet
+ * they do not control.
+ */
+export const humanMessage = (wallet: string, action: string): string => `Lookout verified human v0\nwallet: ${wallet.toLowerCase()}\naction: ${action}`;
+
+export function verifyWalletOwnership(wallet: string, action: string, signatureHex: string | undefined): boolean {
+  if (!signatureHex) return false;
+  return recoverSigner(humanMessage(wallet, action), signatureHex) === wallet.toLowerCase();
+}

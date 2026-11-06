@@ -1,15 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { enrollReviewer } from './enroll.ts';
+import { enrollHuman } from './enroll.ts';
 import { SqliteSeatStore } from './store.ts';
 import { WorldIdError } from './verify.ts';
 import { HUMAN_1, HUMAN_2, WALLET_A, WALLET_B, config, fakeWorld, payload } from './fixtures.ts';
 
 const setup = () => ({ store: new SqliteSeatStore(), world: fakeWorld() });
 const enroll = (s: ReturnType<typeof setup>, p: unknown, wallet: string) =>
-  enrollReviewer({ payload: p, wallet }, { config, store: s.store, fetchImpl: s.world.fetchImpl });
+  enrollHuman({ payload: p, wallet, signature: 'ok' }, { config, store: s.store, fetchImpl: s.world.fetchImpl, ownsWallet: () => true });
 
-test('SUCCESS: a verified human gets a reviewer seat', async () => {
+test('SUCCESS: a verified human is bound to their wallet', async () => {
   const s = setup();
   const r = await enroll(s, payload({ wallet: WALLET_A }), WALLET_A);
   assert.deepEqual(r, { status: 'enrolled', wallet: WALLET_A, seats: 1 });

@@ -8,3 +8,4 @@ export * from './reputation.ts';
 export * from './owner-proof.ts';
 export * from './report-payload.ts';
 export * from './case-id.ts';
+export * from './resolution.ts';

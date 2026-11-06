@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { privateKeyToAccount } from 'viem/accounts';
-import { disputeMessage, recoverSigner, verifyOwnerProof } from './owner-proof.ts';
+import { disputeMessage, humanMessage, recoverSigner, verifyOwnerProof, verifyWalletOwnership } from './owner-proof.ts';
 import { targetHash } from './target.ts';
 
 const owner = privateKeyToAccount(('0x' + '11'.repeat(32)) as `0x${string}`);
@@ -66,4 +66,13 @@ test('a domain is never proved by a signature, because its hash is not an addres
 test('the message is fixed, so a signature cannot be reused for another purpose', () => {
   assert.equal(disputeMessage(H.toUpperCase().replace('0X', '0x')), disputeMessage(H));
   assert.match(disputeMessage(H), /^Lookout dispute v0\ntarget: 0x[0-9a-f]{64}\nclaim: legit$/);
+});
+
+test('WALLET OWNERSHIP: only the wallet itself can sign for it, for this action only', async () => {
+  const sig = await owner.signMessage({ message: humanMessage(owner.address, 'act-1') });
+  assert.equal(verifyWalletOwnership(owner.address, 'act-1', sig), true);
+  assert.equal(verifyWalletOwnership(owner.address.toUpperCase().replace('0X', '0x'), 'act-1', sig), true, 'case does not matter');
+  assert.equal(verifyWalletOwnership(other.address, 'act-1', sig), false, 'someone else cannot claim this wallet');
+  assert.equal(verifyWalletOwnership(owner.address, 'act-2', sig), false, 'a signature for one action is useless for another');
+  for (const bad of [undefined, '', '0x12', 'nope']) assert.equal(verifyWalletOwnership(owner.address, 'act-1', bad), false);
 });

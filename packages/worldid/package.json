@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@worldcoin/idkit-core": "^4.6.0"
+    "@worldcoin/idkit-core": "^4.6.0",
+    "@lookout/core": "*"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

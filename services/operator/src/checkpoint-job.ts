@@ -13,6 +13,8 @@ export interface CheckpointJobDeps {
   arkiv: EntityWriter;
   journal: Journal;
   now: () => number;
+  /** wallets bound to a unique human: they get the reputation floor in every checkpoint */
+  humans?: () => ReadonlySet<string>;
 }
 
 const LAST = 'checkpoint:last';
@@ -40,7 +42,7 @@ export async function runCheckpoint(deps: CheckpointJobDeps): Promise<{ snapshot
   const events = JSON.parse(deps.journal.detail(EVENTS) ?? '[]') as RepEvent[];
   const at = Math.max(deps.now(), prev?.at ?? 0);
   const snapshotId = `rep-${at}`;
-  const next = nextCheckpoint(prev, events, at, snapshotId);
+  const next = nextCheckpoint(prev, events, at, snapshotId, undefined, deps.humans?.() ?? new Set());
 
   const key = `checkpoint:published:${snapshotId}`;
   if (!deps.journal.has(key)) {

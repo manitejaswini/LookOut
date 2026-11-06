@@ -1,7 +1,7 @@
 // Shared test fixtures. Not a test file (no .test.ts suffix), so the runner does not execute it.
 
 import { hashSignal } from '@worldcoin/idkit-core';
-import { REVIEWER_ACTION, type WorldIdConfig } from './config.ts';
+import { HUMAN_ACTION, type WorldIdConfig } from './config.ts';
 
 export const SIGNING_KEY = 'ab'.repeat(32);
 
@@ -10,7 +10,7 @@ export const config: WorldIdConfig = {
   rpId: 'rp_testrp123',
   signingKeyHex: SIGNING_KEY,
   environment: 'staging',
-  action: REVIEWER_ACTION,
+  action: HUMAN_ACTION,
   verifyBaseUrl: 'https://verify.test/api/v4/verify',
 };
 
@@ -38,7 +38,7 @@ export function payload(o: PayloadOptions = {}): Record<string, unknown> {
   return {
     protocol_version: o.protocol_version ?? '4.0',
     nonce: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-    action: o.action ?? REVIEWER_ACTION,
+    action: o.action ?? HUMAN_ACTION,
     environment: o.environment ?? 'staging',
     responses: o.responses ?? [
       {

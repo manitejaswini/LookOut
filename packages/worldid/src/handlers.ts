@@ -1,6 +1,6 @@
 import { signRequest } from '@worldcoin/idkit-core/signing';
 import { loadConfig, type ConfigResult } from './config.ts';
-import { enrollReviewer } from './enroll.ts';
+import { enrollHuman } from './enroll.ts';
 import type { SeatStore } from './store.ts';
 import { normalizeWallet, WorldIdError } from './verify.ts';
 
@@ -14,6 +14,8 @@ import { normalizeWallet, WorldIdError } from './verify.ts';
  */
 
 export interface HandlerDeps {
+  /** how a wallet's ownership is checked. Tests replace it. Default: the wallet's own signature over `humanMessage` */
+  ownsWallet?: (wallet: string, signature: unknown, action: string) => boolean;
   config: () => ConfigResult;
   store: () => SeatStore;
   fetchImpl?: typeof fetch;
@@ -94,18 +96,18 @@ export async function handleVerify(req: Request, deps: HandlerDeps): Promise<Res
   if (!c.ok) return notConfigured(c);
   if (deps.limiter && !deps.limiter.verify(clientKey(req))) return fail(429, 'rate_limited', 'too many requests, slow down');
   try {
-    const body = (await readJson(req)) as { wallet?: unknown; idkitResponse?: unknown } | null;
+    const body = (await readJson(req)) as { wallet?: unknown; idkitResponse?: unknown; signature?: unknown } | null;
     if (!body || typeof body !== 'object') throw new WorldIdError('bad_payload', 'body must be an object');
-    const result = await enrollReviewer(
-      { payload: body.idkitResponse, wallet: body.wallet },
-      { config: c.config, store: deps.store(), fetchImpl: deps.fetchImpl },
+    const result = await enrollHuman(
+      { payload: body.idkitResponse, wallet: body.wallet, signature: body.signature },
+      { config: c.config, store: deps.store(), fetchImpl: deps.fetchImpl, ownsWallet: deps.ownsWallet },
     );
     // a second wallet from the same human, or a wallet that belongs to someone else, is a real refusal, not an error
     if (result.status === 'human_already_enrolled') {
-      return json({ error: 'human_already_enrolled', message: 'This human already holds a reviewer seat with another wallet. One human, one seat.', ...result }, 409);
+      return json({ error: 'human_already_enrolled', message: 'This human is already verified with another wallet. One human, one wallet.', ...result }, 409);
     }
     if (result.status === 'wallet_taken') {
-      return json({ error: 'wallet_taken', message: 'This wallet already holds a seat for a different person.', ...result }, 409);
+      return json({ error: 'wallet_taken', message: 'This wallet is already verified for a different person.', ...result }, 409);
     }
     return json({ ok: true, ...result });
   } catch (e) {

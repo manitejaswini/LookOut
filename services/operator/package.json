@@ -1,11 +1,13 @@
 {
-  "name": "@lookout/panel",
+  "name": "@lookout/operator",
   "version": "0.0.1",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "test": "node --test \"src/**/*.test.ts\"",
     "typecheck": "tsc --noEmit"
@@ -15,8 +17,9 @@
     "@lookout/core": "*",
     "@lookout/escrow": "*",
     "@lookout/stealth": "*",
-    "@lookout/worldid": "*",
-    "@arkiv-network/sdk": "^1.0.1"
+    "@arkiv-network/sdk": "^1.0.1",
+    "@lookout/indexer": "*",
+    "@lookout/worldid": "*"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_VERIFY_BASE_URL, REVIEWER_ACTION, loadConfig } from './config.ts';
+import { DEFAULT_VERIFY_BASE_URL, HUMAN_ACTION, loadConfig } from './config.ts';
 import { SIGNING_KEY } from './fixtures.ts';
 
 const good = { NEXT_PUBLIC_WORLD_APP_ID: 'app_abc123', NEXT_PUBLIC_WORLD_RP_ID: 'rp_abc123', RP_SIGNING_KEY: SIGNING_KEY };
@@ -9,7 +9,7 @@ test('a complete environment loads, and the environment defaults to production (
   const r = loadConfig(good);
   assert.ok(r.ok);
   assert.equal(r.config.environment, 'production');
-  assert.equal(r.config.action, REVIEWER_ACTION);
+  assert.equal(r.config.action, HUMAN_ACTION);
   assert.equal(r.config.verifyBaseUrl, DEFAULT_VERIFY_BASE_URL);
   assert.equal(r.config.signingKeyHex, SIGNING_KEY);
 });
@@ -48,5 +48,5 @@ test('the verify endpoint can be overridden for tests, and the action is not con
   const r = loadConfig({ ...good, WORLD_ID_VERIFY_BASE_URL: 'https://stub.test/verify', WORLD_ID_ACTION: 'hijack' });
   assert.ok(r.ok);
   assert.equal(r.config.verifyBaseUrl, 'https://stub.test/verify');
-  assert.equal(r.config.action, REVIEWER_ACTION, 'only the code decides what the server signs and accepts');
+  assert.equal(r.config.action, HUMAN_ACTION, 'only the code decides what the server signs and accepts');
 });
