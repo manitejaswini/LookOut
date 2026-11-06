@@ -49,6 +49,7 @@ test('different humans with different wallets each get a seat, and the pool list
   s.enroll('nil_' + '3'.repeat(64), WALLET_C, ACTION);
   assert.equal(s.count(ACTION), 3);
   assert.deepEqual(s.wallets(ACTION), [WALLET_B, WALLET_A, WALLET_C]);
+  assert.deepEqual(s.seats(ACTION).slice(0, 2), [{ wallet: WALLET_B, nullifier: H1 }, { wallet: WALLET_A, nullifier: H2 }]);
 });
 
 test('seats are per action: the same human can hold a seat under another action', () => {

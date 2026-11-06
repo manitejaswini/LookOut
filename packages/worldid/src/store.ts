@@ -24,6 +24,8 @@ export interface SeatStore {
   count(action: string): number;
   /** lowercase wallet addresses holding a seat, oldest first. The panel service draws jurors from this pool */
   wallets(action: string): string[];
+  /** every seat with the nullifier that earned it. One nullifier and one wallet per seat, enforced by the store */
+  seats(action: string): { wallet: string; nullifier: string }[];
   close(): void;
 }
 
@@ -80,6 +82,10 @@ export class SqliteSeatStore implements SeatStore {
 
   wallets(action: string): string[] {
     return (this.db.prepare('SELECT wallet FROM seats WHERE action = ? ORDER BY enrolled_at, rowid').all(action) as { wallet: string }[]).map((r) => r.wallet);
+  }
+
+  seats(action: string): { wallet: string; nullifier: string }[] {
+    return this.db.prepare('SELECT wallet, nullifier FROM seats WHERE action = ? ORDER BY enrolled_at, rowid').all(action) as { wallet: string; nullifier: string }[];
   }
 
   close(): void {
