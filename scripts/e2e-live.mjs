@@ -9,7 +9,7 @@
 import './safe-errors.mjs';
 
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { createPublicClient, formatEther, http } from 'viem';
@@ -44,6 +44,9 @@ const reporter = address.toLowerCase();
 console.log('1. a report with a locked deposit');
 const keys = generateKeys();
 const meta = metaAddress(keys);
+// kept on disk so a failed run never loses the bounty keys (a throwaway testnet reporter, local only)
+mkdirSync(join(homedir(), '.lookout'), { recursive: true });
+writeFileSync(join(homedir(), '.lookout', 'e2e-last-keys.json'), JSON.stringify({ spending: Buffer.from(keys.spendingKey).toString('hex'), viewing: Buffer.from(keys.viewingKey).toString('hex') }));
 const reportId = newReportId();
 const domain = `lookout-e2e-${reportId.slice(0, 8)}.example`;
 const dep = await escrow.lockDeposit(reportId);
@@ -112,7 +115,9 @@ try {
     if (!bountyRow) await sleep(2000);
   }
   check(!!bountyRow, 'a bounty announcement is on Arkiv');
-  const R = `0x${Buffer.from(val(bountyRow.payload)).toString('hex')}`;
+  // the payload may come back as raw bytes or as a 0x hex string, depending on the client
+  const raw = val(bountyRow.payload);
+  const R = typeof raw === 'string' ? `0x${raw.replace(/^0x/, '')}` : `0x${Buffer.from(raw).toString('hex')}`;
   const { spendingPub } = parseMetaAddress(meta);
   const stealth = stealthAddressFor(keys.viewingKey, spendingPub, R);
   const balance = await sep.getBalance({ address: stealth });

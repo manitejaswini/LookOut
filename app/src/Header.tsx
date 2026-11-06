@@ -13,6 +13,8 @@ const NAV: [string, string][] = [
   ['/pay', 'Pay'],
   ['/report', 'Report'],
   ['/dispute', 'Dispute'],
+  ['/funds', 'Funds'],
+  ['/claim', 'Bounty'],
   ['/reviewer', 'Join panel'],
   ['/vote', 'Vote'],
   ['/pitch/arkiv', 'Arkiv pitch'],

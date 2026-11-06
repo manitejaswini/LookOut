@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import ReviewerJoin from '../../ReviewerJoin';
+import StakePanel from '../../StakePanel';
 
 export const metadata: Metadata = {
   title: 'Join the reviewer panel · Lookout',
@@ -24,7 +25,10 @@ export default function ReviewerPage() {
               <li><b>What we keep.</b> Only an anonymous, per-app identifier (a nullifier) and your wallet. Never who you are.</li>
             </ul>
           </div>
-          <ReviewerJoin />
+          <div>
+            <ReviewerJoin />
+            <StakePanel />
+          </div>
         </div>
       </section>
     </main>

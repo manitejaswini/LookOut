@@ -1,11 +1,16 @@
-import { createWalletClient as createArkivWalletClient } from '@arkiv-network/sdk';
+import { createPublicClient as createArkivPublicClient, createWalletClient as createArkivWalletClient } from '@arkiv-network/sdk';
+import { eq } from '@arkiv-network/sdk/query';
+import { privateKeyToAccount } from 'viem/accounts';
 import { createPublicClient, createWalletClient, custom, http, parseEther, type PublicClient } from 'viem';
-import { createAttestation, createReport, createVote, newReportId, revealVote, type EntityWriter, type TrustWriter } from '@lookout/arkiv';
+import { SCHEMAS, createAttestation, createReport, createVote, newReportId, revealVote, type EntityWriter, type TrustWriter } from '@lookout/arkiv';
 import { CONFIG, encodeReportPayload } from '@lookout/core';
 import { metaAddress, sealMetaAddress } from '@lookout/stealth';
 import { loadOrCreateKeys } from './stealth-keys';
+import { rememberReport } from './reports-store';
 import { createEscrow } from '@lookout/escrow';
+import type { ClaimPorts } from '../flows/claim-flow';
 import type { DisputePorts } from '../flows/dispute-flow';
+import type { FundsPorts } from '../flows/funds-flow';
 import type { PaymentRecord, SendPorts } from '../flows/pay-flow';
 import type { ReportPorts } from '../flows/report-flow';
 import type { VotePorts, VoteStorage } from '../flows/vote-flow';
@@ -47,6 +52,7 @@ export function reportPorts(w: WalletState): ReportPorts {
       const sealed = input.bounty && PAYER_ENC_KEY ? sealMetaAddress(metaAddress(loadOrCreateKeys()), PAYER_ENC_KEY, input.reportId) : undefined;
       const payload = encodeReportPayload({ kind: input.kind, value: input.value, sealed });
       const out = await createReport(arkivClient(w) as unknown as EntityWriter, { kind: input.kind, value: input.value, category: input.category, reportId: input.reportId, payload });
+      rememberReport({ reportId: input.reportId, kind: input.kind, value: input.value, at: Math.floor(Date.now() / 1000) });
       return { entityKey: out.entityKey, expiresAt: String(out.expiresAt) };
     },
   };
@@ -114,6 +120,51 @@ export function disputePorts(w: WalletState): DisputePorts {
       const bytes = Uint8Array.from((signature.slice(2).match(/../g) ?? []).map((h) => parseInt(h, 16)));
       const out = await createAttestation(arkivClient(w) as unknown as EntityWriter, { kind: 'address', value: target, claim: 'legit', payload: bytes });
       return { entityKey: out.entityKey };
+    },
+  };
+}
+
+/* ------------------------------ funds and bounties ------------------------------ */
+
+/** Reads what the escrow holds for this wallet. Reads need no signature. */
+export function fundsPorts(): FundsPorts {
+  const publicClient = createPublicClient({ chain: ESCROW_CHAIN, transport: http() }) as PublicClient;
+  const escrow = createEscrow({ address: ESCROW_ADDRESS as `0x${string}`, publicClient });
+  return {
+    claimable: (a) => escrow.claimable(a),
+    deposit: (a, id) => escrow.deposit(a, id),
+    resolveWindow: async () => (await escrow.config()).resolveWindow,
+    now: () => Math.floor(Date.now() / 1000),
+  };
+}
+
+const hexToBytes = (h: string) => Uint8Array.from((h.replace(/^0x/, '').match(/../g) ?? []).map((x) => parseInt(x, 16)));
+
+/**
+ * Finds bounty announcements on Arkiv (keyless public read, so Arkiv does not learn who is looking) and moves the money out of the
+ * one-time address. The one-time key signs locally in this browser: it never touches the connected wallet.
+ */
+export function claimPorts(): ClaimPorts {
+  const sepoliaClient = createPublicClient({ chain: ESCROW_CHAIN, transport: http() });
+  const arkivRead = createArkivPublicClient({ chain: ARKIV_CHAIN as never, transport: http() as never });
+  return {
+    announcements: async (reportId) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { entities } = await (arkivRead.select({ reportId: true, payload: true } as never) as any).from(SCHEMAS.bounty).where(eq('reportId', reportId)).fetch();
+      return (entities as Record<string, unknown>[]).flatMap((e) => {
+        const raw = e.payload && typeof e.payload === 'object' && 'value' in (e.payload as object) ? (e.payload as { value: unknown }).value : e.payload;
+        const bytes = raw instanceof Uint8Array ? raw : typeof raw === 'string' ? hexToBytes(raw) : null;
+        return bytes && bytes.length === 33 ? [{ reportId, ephemeralPublicKey: `0x${Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')}` }] : [];
+      });
+    },
+    balance: (a) => sepoliaClient.getBalance({ address: a as `0x${string}` }),
+    gasPrice: () => sepoliaClient.getGasPrice(),
+    sendFrom: async (key, to, wei, gasPrice) => {
+      const account = privateKeyToAccount(`0x${Array.from(key, (b) => b.toString(16).padStart(2, '0')).join('')}`);
+      const wallet = createWalletClient({ account, chain: ESCROW_CHAIN, transport: http() });
+      // a legacy transaction with the exact gas price that was reserved, so balance = value + fee and nothing is left behind
+      const hash = await wallet.sendTransaction({ to: to as `0x${string}`, value: wei, gas: 21_000n, gasPrice, type: 'legacy' });
+      return { hash };
     },
   };
 }
