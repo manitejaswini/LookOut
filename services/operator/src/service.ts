@@ -52,7 +52,14 @@ const DISPUTES = 'service:disputes';
 export function createOperatorService(deps: ServiceDeps) {
   const { journal } = deps;
 
-  async function tick(): Promise<TickReport> {
+  /**
+   * One pass at a time. A pass talks to two chains and can take longer than the timer that starts it, and two overlapping passes both
+   * see the same deposit as "not mirrored yet" and each write it. If a pass is still running, a new call joins it instead of starting another.
+   */
+  let running: Promise<TickReport> | null = null;
+  const tick = (): Promise<TickReport> => (running ??= onePass().finally(() => { running = null; }));
+
+  async function onePass(): Promise<TickReport> {
     const out: TickReport = { errors: [] };
 
     try {
@@ -60,11 +67,11 @@ export function createOperatorService(deps: ServiceDeps) {
       const latest = await deps.latestEscrowBlock();
       if (latest >= from) {
         const [deposits, settled] = [await deps.escrow.depositEvents(from, latest), await deps.escrow.settledEvents(from, latest)];
-        const d = await mirrorDeposits({ arkiv: deps.arkiv, journal, findStakes: deps.findStakes }, deposits);
+        const d = await mirrorDeposits({ arkiv: deps.arkiv, journal, findStakes: deps.findStakes, now: deps.now }, deposits);
         const s = await mirrorSettlements({ arkiv: deps.arkiv, journal, findStakes: deps.findStakes }, settled);
         // only move on once nothing is waiting for its deposit to be mirrored: events are never skipped, only re-read
-        if (s.unknown === 0) journal.mark(CURSOR, (latest + 1n).toString());
-        out.mirrored = { deposits: d.created, settlements: s.updated, waiting: s.unknown };
+        if (s.unknown === 0 && d.deferred === 0) journal.mark(CURSOR, (latest + 1n).toString());
+        out.mirrored = { deposits: d.created, settlements: s.updated, waiting: s.unknown + d.deferred };
       }
     } catch (e) {
       out.errors.push({ part: 'mirror', message: safeMessage(e) });

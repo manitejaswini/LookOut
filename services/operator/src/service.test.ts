@@ -203,7 +203,7 @@ test('MIRROR: if Arkiv already holds a stake for the report (an earlier write th
   const arkiv = { async createEntity() { w.created.push({ extra: true }); return { entityKey: '0xnew', txHash: TX, expiresAt: 0 }; }, async extendEntity() { return { expiresAt: 0 }; }, async patchEntity() {} };
   const dep = { reporter: REPORTER as `0x${string}`, reportId: '7'.repeat(32), amount: 10n ** 15n, txHash: TX as `0x${string}`, blockNumber: 1n };
   const r = await mirrorDeposits({ arkiv, journal, findStakes: async () => ['0x' + 'aa'.repeat(32)] }, [dep]);
-  assert.deepEqual(r, { created: 0, skipped: 1 });
+  assert.deepEqual(r, { created: 0, skipped: 1, deferred: 0 });
   assert.equal(w.created.length, 0, 'no second entity');
   assert.equal(journal.detail(`stake:${REPORTER}:${'7'.repeat(32)}`), '0x' + 'aa'.repeat(32), 'the existing one is remembered');
 });
@@ -218,4 +218,45 @@ test('MIRROR: a settlement updates EVERY stake entity for the report, so a dupli
   const r = await mirrorSettlements({ arkiv, journal, findStakes: async () => ['0x' + '01'.repeat(32), '0x' + '02'.repeat(32)] }, [ev]);
   assert.equal(r.updated, 1);
   assert.deepEqual([...patched].sort(), ['0x' + '01'.repeat(32), '0x' + '02'.repeat(32)]);
+});
+
+test('MIRROR: after a create FAILS (it may still have landed), nothing is created again for a minute, and then Arkiv is checked first', async () => {
+  const { journal } = rig();
+  let clock = 5_000;
+  let creates = 0;
+  const arkiv = { async createEntity() { creates++; throw new Error('the request took too long to respond'); }, async extendEntity() { return { expiresAt: 0 }; }, async patchEntity() {} };
+  const dep = { reporter: REPORTER as `0x${string}`, reportId: '9'.repeat(32), amount: 10n ** 15n, txHash: TX as `0x${string}`, blockNumber: 1n };
+  const base = { arkiv, journal, now: () => clock };
+
+  await assert.rejects(mirrorDeposits(base, [dep]), /took too long/);
+  assert.equal(creates, 1);
+
+  clock += 10; // a moment later: the node has not caught up, so do not guess
+  const soon = await mirrorDeposits({ ...base, findStakes: async () => [] }, [dep]);
+  assert.deepEqual(soon, { created: 0, skipped: 0, deferred: 1 });
+  assert.equal(creates, 1, 'no second create');
+
+  clock += 61; // later: the entity is now visible, so it is adopted and not duplicated
+  const later = await mirrorDeposits({ ...base, findStakes: async () => ['0x' + 'cc'.repeat(32)] }, [dep]);
+  assert.deepEqual(later, { created: 0, skipped: 1, deferred: 0 });
+  assert.equal(creates, 1);
+  assert.equal(journal.detail(`stake:${REPORTER}:${'9'.repeat(32)}`), '0x' + 'cc'.repeat(32));
+});
+
+test('MIRROR: the scan does not move past a deposit that is still deferred, so it is not lost', async () => {
+  const { w, service, journal } = rig();
+  journal.mark(`stake-attempt:${REPORTER}:${'1'.repeat(32)}`, String(w.t)); // a create failed just now
+  const r = await service.tick();
+  assert.equal(r.mirrored?.waiting, 1);
+  assert.equal(journal.detail('service:escrow-cursor'), undefined, 'the cursor stays put');
+});
+
+test('PASSES NEVER OVERLAP: two calls at the same time share one pass, so a deposit is mirrored exactly once', async () => {
+  const { w, service } = rig();
+  const [a, b, c] = await Promise.all([service.tick(), service.tick(), service.tick()]);
+  assert.equal(a, b, 'the second call joined the pass already running');
+  assert.equal(b, c);
+  assert.equal(w.created.filter((x) => x.status === 'locked').length, 1, 'one stake entity, not three');
+  const later = await service.tick(); // and the next call starts a fresh pass
+  assert.notEqual(later, a);
 });
