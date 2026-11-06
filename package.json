@@ -11,6 +11,7 @@
     "test": "npm test -w @lookout/core -w @lookout/arkiv",
     "typecheck": "npm run typecheck -w @lookout/core -w @lookout/arkiv",
     "wallet:new": "node scripts/new-wallet.mjs",
-    "arkiv:check": "node scripts/check-arkiv.mjs"
+    "arkiv:check": "node scripts/check-arkiv.mjs",
+    "arkiv:smoke": "node scripts/arkiv-smoke.mjs"
   }
 }
