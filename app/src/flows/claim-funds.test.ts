@@ -110,11 +110,11 @@ test('FUNDS: what is owed, and which deposits can be reclaimed yet', async () =>
   assert.equal(f.claimableWei, ETH / 1000n);
   const by = Object.fromEntries(f.deposits.map((d) => [d.reportId[0], d]));
   assert.equal(by['1'].status, 'returned');
-  assert.match(by['1'].note, /refunded/);
+  assert.match(by['1'].note, /returned to you/);
   assert.equal(by['2'].canReclaim, false, 'locked just now: the window has not passed');
   assert.match(by['2'].note, /30 day/);
   assert.equal(by['3'].canReclaim, true, 'locked long ago with no ruling: the reporter may take it back');
-  assert.match(by['3'].note, /not ruled in time/);
+  assert.match(by['3'].note, /settled this in time/);
 });
 
 test('FUNDS: a deposit that cannot be read is skipped, not fatal, and a settled one is never reclaimable', async () => {

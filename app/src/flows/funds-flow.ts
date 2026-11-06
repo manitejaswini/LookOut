@@ -1,12 +1,12 @@
 /**
  * What the escrow owes the connected wallet, and what it can do about it.
  *
- *  - A refund (the panel confirmed a report) is held in the contract until the owner CLAIMS it. It is pulled, not pushed, so a
+ *  - A refund (a report was confirmed or refunded) is held in the contract until the owner CLAIMS it. It is pulled, not pushed, so a
  *    wallet that refuses ETH can never block anyone else's settlement.
- *  - A deposit the panel never ruled on can be RECLAIMED by the reporter once the window has passed. No bounty, no reputation change.
+ *  - A deposit nobody settled can be RECLAIMED by the reporter once the window has passed. No bounty, no reputation change.
  */
 
-export type DepositStatus = 'none' | 'locked' | 'returned' | 'slashed' | 'reclaimed';
+export type DepositStatus = 'none' | 'locked' | 'returned' | 'slashed' | 'reclaimed' | 'refunded';
 
 export interface FundsPorts {
   claimable(address: string): Promise<bigint>;
@@ -41,10 +41,11 @@ export interface Funds {
 
 const NOTE: Record<DepositStatus, string> = {
   none: 'No deposit was found for this report in the escrow.',
-  locked: 'Waiting for the review panel.',
-  returned: 'The panel confirmed this report. The deposit was refunded to you.',
-  slashed: 'The panel rejected this report. The deposit went to the bounty pool.',
-  reclaimed: 'You took this deposit back after the panel did not rule in time.',
+  locked: 'Waiting for a trusted source to corroborate it.',
+  returned: 'Confirmed: a trusted source corroborated this report. The deposit was returned to you.',
+  slashed: 'The operator rejected this report. The deposit went to the bounty pool.',
+  reclaimed: 'You took this deposit back after nobody settled it in time.',
+  refunded: 'Refunded: the report added nothing new, or no trusted source corroborated it in time. No bounty, and your reputation did not change.',
 };
 
 export async function loadFunds(ports: FundsPorts, address: string, reports: readonly SavedReport[]): Promise<Funds> {
@@ -61,8 +62,8 @@ export async function loadFunds(ports: FundsPorts, address: string, reports: rea
     const reclaimableAt = d.status === 'locked' ? Number(d.lockedAt + window) : null;
     const canReclaim = reclaimableAt !== null && now >= reclaimableAt;
     const note = d.status === 'locked' && reclaimableAt !== null && !canReclaim
-      ? `${NOTE.locked} You can take the deposit back yourself in ${Math.ceil((reclaimableAt - now) / 86_400)} day(s) if nobody rules.`
-      : d.status === 'locked' && canReclaim ? 'The panel has not ruled in time. You can take the deposit back now.' : NOTE[d.status];
+      ? `${NOTE.locked} You can take the deposit back yourself in ${Math.ceil((reclaimableAt - now) / 86_400)} day(s) if nobody settles it.`
+      : d.status === 'locked' && canReclaim ? 'Nobody has settled this in time. You can take the deposit back now.' : NOTE[d.status];
     deposits.push({ ...r, status: d.status, reclaimableAt, canReclaim, note });
   }
   return { claimableWei, deposits };

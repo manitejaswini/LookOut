@@ -3,7 +3,7 @@ import FundsPage from '../../FundsPage';
 
 export const metadata: Metadata = {
   title: 'Your escrow funds · Lookout',
-  description: 'Claim refunds and take back deposits the panel did not rule on.',
+  description: 'Claim refunds and take back deposits nobody settled.',
 };
 
 export default function Page() {
@@ -17,7 +17,7 @@ export default function Page() {
             <p className="lede-sm">A confirmed report earns the deposit back, and you claim it yourself. If nobody rules in time you can take the deposit back after the window.</p>
             <ul className="why-list">
               <li><b>Refunds are pulled.</b> You claim them, so no wallet can block anyone else.</li>
-              <li><b>Deposits are not lost.</b> If the panel never rules, the deposit comes back to you with no bounty.</li>
+              <li><b>Deposits are not lost.</b> A report nobody corroborates is refunded with no bounty, and you can always reclaim after the window.</li>
             </ul>
           </div>
           <FundsPage />

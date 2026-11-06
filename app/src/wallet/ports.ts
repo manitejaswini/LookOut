@@ -2,7 +2,7 @@ import { createPublicClient as createArkivPublicClient, createWalletClient as cr
 import { eq } from '@arkiv-network/sdk/query';
 import { privateKeyToAccount } from 'viem/accounts';
 import { createPublicClient, createWalletClient, custom, http, parseEther, type PublicClient } from 'viem';
-import { SCHEMAS, createAttestation, createReport, createVote, newReportId, revealVote, type EntityWriter, type TrustWriter } from '@lookout/arkiv';
+import { SCHEMAS, createAttestation, createReport, newReportId, type EntityWriter } from '@lookout/arkiv';
 import { CONFIG, encodeReportPayload } from '@lookout/core';
 import { metaAddress, sealMetaAddress } from '@lookout/stealth';
 import { loadOrCreateKeys } from './stealth-keys';
@@ -13,7 +13,6 @@ import type { DisputePorts } from '../flows/dispute-flow';
 import type { FundsPorts } from '../flows/funds-flow';
 import type { PaymentRecord, SendPorts } from '../flows/pay-flow';
 import type { ReportPorts } from '../flows/report-flow';
-import type { VotePorts, VoteStorage } from '../flows/vote-flow';
 import { ARKIV_CHAIN, ESCROW_ADDRESS, ESCROW_CHAIN, escrowConfigured } from './chains';
 import type { WalletState } from './WalletProvider';
 
@@ -55,18 +54,6 @@ export function reportPorts(w: WalletState): ReportPorts {
       rememberReport({ reportId: input.reportId, kind: input.kind, value: input.value, at: Math.floor(Date.now() / 1000) });
       return { entityKey: out.entityKey, expiresAt: String(out.expiresAt) };
     },
-  };
-}
-
-export function browserStorage(): VoteStorage {
-  return { get: (k) => window.localStorage.getItem(k), set: (k, v) => window.localStorage.setItem(k, v) };
-}
-
-export function votePorts(w: WalletState): VotePorts {
-  return {
-    storage: browserStorage(),
-    createVote: async (i) => ({ entityKey: (await createVote(arkivClient(w) as unknown as EntityWriter, i)).entityKey }),
-    revealVote: (i) => revealVote(arkivClient(w) as unknown as TrustWriter, i),
   };
 }
 

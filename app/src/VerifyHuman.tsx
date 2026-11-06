@@ -1,11 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { createWalletClient, custom } from 'viem';
+import { humanMessage } from '@lookout/core';
 import { useWallet } from './wallet/WalletProvider';
 import { IDKitErrorCodes, IDKitRequestWidget, proofOfHuman, type RpContext } from '@worldcoin/idkit';
 
 /**
- * "Join the reviewer panel": one human, one seat, proven with World ID Proof of Human.
+ * "Verify you are human": one human, one wallet, proven with World ID Proof of Human. The wallet also signs a short message, so nobody
+ * can register a wallet they do not control.
  * Everything that matters is decided on the server (/api/worldid/*). This screen only asks for the proof and
  * shows what the server decided.
  */
@@ -47,13 +50,11 @@ const SETUP_CODES: ReadonlySet<string> = new Set([
   IDKitErrorCodes.MalformedRequest,
 ]);
 
-export default function ReviewerJoin() {
+export default function VerifyHuman() {
   const [status, setStatus] = useState<Status>({ state: 'loading' });
   const connected = useWallet();
-  const [typed, setTyped] = useState('');
-  // a connected wallet fills the field. Typing still works, for a wallet that is not in this browser
-  const wallet = typed || connected.address || '';
-  const setWallet = setTyped;
+  // the connected wallet is the one verified: it has to sign, so an address cannot simply be typed in
+  const wallet = connected.address || '';
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [request, setRequest] = useState<SignedRequest | null>(null);
@@ -73,6 +74,8 @@ export default function ReviewerJoin() {
   useEffect(() => { void refreshStatus(); }, [refreshStatus]);
 
   const walletOk = WALLET.test(wallet.trim());
+  // the wallet's own signature over the message for this action, asked for BEFORE the World ID step
+  const signature = useRef<string | null>(null);
 
   async function start() {
     setOutcome(null);
@@ -83,7 +86,10 @@ export default function ReviewerJoin() {
       // the server signs the request, with an action the SERVER chooses. The signing key never reaches the browser.
       const res = await fetch('/api/worldid/rp-signature', { method: 'POST' });
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message ?? 'could not start a verification');
-      setRequest((await res.json()) as SignedRequest);
+      const signed = (await res.json()) as SignedRequest;
+      if (!connected.address || connected.address.toLowerCase() !== wallet.trim().toLowerCase()) throw new Error('Connect the wallet you want to verify (top right), so it can sign.');
+      signature.current = await createWalletClient({ transport: custom(connected.provider()), account: connected.address }).signMessage({ message: humanMessage(wallet.trim().toLowerCase(), signed.action) });
+      setRequest(signed);
       setOpen(true);
     } catch (e) {
       setOutcome({ kind: 'error', message: e instanceof Error ? e.message : 'could not start a verification' });
@@ -97,7 +103,7 @@ export default function ReviewerJoin() {
     const res = await fetch('/api/worldid/verify', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ wallet: wallet.trim().toLowerCase(), idkitResponse: result }),
+      body: JSON.stringify({ wallet: wallet.trim().toLowerCase(), idkitResponse: result, signature: signature.current }),
     });
     const body = await res.json().catch(() => ({}));
     if (res.ok) {
@@ -144,9 +150,9 @@ export default function ReviewerJoin() {
   return (
     <div className="wallet reviewer">
       <div className="wallet-bar">
-        <span className="mono-label">REVIEWER PANEL · WORLD ID</span>
+        <span className="mono-label">VERIFIED HUMAN · WORLD ID</span>
         <span className="mono-label">
-          {status.state === 'ready' ? `${status.seats} SEAT${status.seats === 1 ? '' : 'S'} · ${status.environment.toUpperCase()}` : ' '}
+          {status.state === 'ready' ? `${status.seats} VERIFIED HUMAN${status.seats === 1 ? '' : 'S'} · ${status.environment.toUpperCase()}` : ' '}
         </span>
       </div>
 
@@ -155,13 +161,13 @@ export default function ReviewerJoin() {
 
       <label className="mono-label" htmlFor="reviewer-wallet">Your wallet address</label>
       <form className="input-row" onSubmit={(e) => { e.preventDefault(); void start(); }}>
-        <input id="reviewer-wallet" value={wallet} onChange={(e) => setWallet(e.target.value)} placeholder="0x…" spellCheck={false} autoComplete="off" />
+        <input id="reviewer-wallet" value={wallet} readOnly placeholder="Connect your wallet (top right)" spellCheck={false} autoComplete="off" />
         <button className="btn" type="submit" disabled={busy || !walletOk || status.state !== 'ready'}>
           {busy ? 'Starting…' : 'Verify with World ID'}
         </button>
       </form>
       <p className="tiny">
-        The proof is tied to this address, so it cannot be reused for another wallet. Connect your wallet in the top bar to fill this in, or paste an address.
+        The proof is tied to this address, so it cannot be reused for another wallet. The proof is also tied to this wallet by a signature, so only a wallet you control can be verified.
       </p>
 
       {request && (
@@ -219,17 +225,17 @@ function card(o: Outcome): { tone: string; tag: string; line: string; note: stri
     case 'seated':
       return {
         tone: 'v-ok', tag: o.again ? 'ALREADY SEATED' : 'SEAT GRANTED',
-        line: o.again ? 'You already hold a reviewer seat with this wallet.' : 'You are in the reviewer pool.',
-        note: `Verified as a unique human, without revealing who you are. ${o.seats} seat${o.seats === 1 ? '' : 's'} held. Jurors are drawn at random, vote hidden, then reveal.`,
+        line: o.again ? 'This wallet is already verified.' : 'Your wallet is verified as a unique human.',
+        note: `Verified without revealing who you are. Reports from this wallet now start with a small reputation floor, and it can earn bounties. ${o.seats} verified human${o.seats === 1 ? '' : 's'} so far.`,
       };
     case 'cancelled':
-      return { tone: 'v-warn', tag: 'CANCELLED', line: 'No seat was granted.', note: 'You backed out of the verification. You can still file reports and check targets as before. Nothing else changes.' };
+      return { tone: 'v-warn', tag: 'CANCELLED', line: 'Nothing was recorded.', note: 'You backed out of the verification. You can still file reports and check targets as before. Nothing else changes.' };
     case 'no_credential':
-      return { tone: 'v-warn', tag: 'NO PROOF OF HUMAN', line: 'A Proof of Human credential is needed for a seat.', note: 'No seat was granted. You can still file reports and check targets: reports are limited by deposits and reputation, not by this check.' };
+      return { tone: 'v-warn', tag: 'NO PROOF OF HUMAN', line: 'A Proof of Human credential is needed to be verified.', note: 'Nothing was recorded. You can still file reports and check addresses: verification only adds a reputation floor and bounty eligibility.' };
     case 'already_enrolled':
-      return { tone: 'v-block', tag: 'ONE HUMAN, ONE SEAT', line: 'This person already holds a reviewer seat with another wallet.', note: 'A second seat is refused, whichever wallet is used. This is what keeps one person from filling the panel.' };
+      return { tone: 'v-block', tag: 'ONE HUMAN, ONE WALLET', line: 'This person is already verified with another wallet.', note: 'A second wallet is refused, whichever one is used. This is what keeps one person from becoming many weighted reporters.' };
     case 'wallet_taken':
-      return { tone: 'v-block', tag: 'WALLET IN USE', line: 'This wallet already holds a seat for a different person.', note: 'Use a wallet that belongs to you.' };
+      return { tone: 'v-block', tag: 'WALLET IN USE', line: 'This wallet is already verified for a different person.', note: 'Use a wallet that belongs to you.' };
     case 'error':
       return { tone: 'v-warn', tag: 'NOT VERIFIED', line: 'The verification did not complete.', note: o.message };
   }

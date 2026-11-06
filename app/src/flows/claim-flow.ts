@@ -3,7 +3,7 @@ import { parseMetaAddress, stealthAddressFor, stealthPrivateKey, sweepValue, met
 /**
  * Collecting a private bounty.
  *
- * The panel pays each bounty to a one-time address that only the reporter can work out. The reporter's own keys, kept in this
+ * The operator pays each bounty to a one-time address that only the reporter can work out. The reporter's own keys, kept in this
  * browser, find those addresses and can spend from them. This module is the logic; the page only shows it.
  *
  *   findBounties   for each report this browser filed, look for a bounty announcement and work out where it was paid
@@ -16,7 +16,7 @@ import { parseMetaAddress, stealthAddressFor, stealthPrivateKey, sweepValue, met
 
 export interface BountyAnnouncement {
   reportId: string;
-  /** the panel's one-time public key R for this bounty, 0x + 33 bytes */
+  /** the operator's one-time public key R for this bounty, 0x + 33 bytes */
   ephemeralPublicKey: string;
 }
 

@@ -90,7 +90,7 @@ test('the dispute button is only offered to the owner of an ordinary wallet addr
   assert.match(whyNotDispute('evil-site.example', OWN)!, /Only a wallet address/);
 });
 
-test('DISPUTE: the owner signs, the signature is the proof the panel will accept, and it is posted to Arkiv', async () => {
+test('DISPUTE: the owner signs, the signature is the proof the operator will accept, and it is posted to Arkiv', async () => {
   const d = disputePorts(OWN);
   const steps: DisputeStep[] = [];
   const r = await runDispute(d.ports, OWN, (s) => steps.push(s));

@@ -7,7 +7,7 @@ import { short, useWallet } from './wallet/WalletProvider';
 
 /**
  * "This is my address and the flag is wrong." The owner signs a message with the address's own key. That signature is the proof,
- * and anyone can check it. It does NOT clear the flag: it asks the review panel to look at it, and only a panel ruling can overturn a flag.
+ * and anyone can check it. It does NOT clear the flag: it asks the operator to look at it, and only an operator ruling can overturn a flag.
  */
 
 const TEXT: Record<DisputeStep, string> = {
@@ -43,8 +43,8 @@ export default function DisputeBox({ target }: { target: string }) {
     return (
       <div className="verdict v-unknown" role="status">
         <div className="verdict-head"><span className="verdict-tag">DISPUTE FILED</span></div>
-        <p className="verdict-line">The review panel will now be asked to look at this flag.</p>
-        <p className="tiny">Record <code>{short(done)}</code>. The flag stays in place until the panel rules. A dispute alone never removes it.</p>
+        <p className="verdict-line">The operator will now be asked to look at this flag.</p>
+        <p className="tiny">Record <code>{short(done)}</code>. The flag stays in place until the operator rules. A dispute alone never removes it.</p>
       </div>
     );
   }

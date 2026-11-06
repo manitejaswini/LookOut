@@ -4,8 +4,8 @@ import { disputeMessage, normalizeTarget, targetHash } from '@lookout/core';
  * Disputing a flag as the OWNER of the flagged address.
  *
  * The owner signs a fixed message with the address's own key. That signature is the proof (core/owner-proof.ts): nobody else
- * can make it, and every indexer and the panel can check it without trusting anyone. The dispute is then written to Arkiv from
- * the same wallet. A dispute never clears a flag by itself: it makes the panel open a case, and only a ruling can.
+ * can make it, and every indexer and the operator can check it without trusting anyone. The dispute is then written to Arkiv from
+ * the same wallet. A dispute never clears a flag by itself: it puts the flag in front of the operator, and only a ruling can overturn it.
  *
  * Only an ordinary wallet address can be disputed this way. A contract has no key to sign with, and a domain needs a different
  * proof that is not built yet. Those owners can still ask for review by reporting with a deposit.

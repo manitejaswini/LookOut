@@ -8,7 +8,7 @@ import { escrowFor, fundsPorts } from './wallet/ports';
 import { savedReports } from './wallet/reports-store';
 import { short, useWallet } from './wallet/WalletProvider';
 
-/** What the escrow holds for you: refunds you can claim, and deposits the panel never ruled on that you can take back. */
+/** What the escrow holds for you: refunds you can claim, and deposits nobody settled that you can take back. */
 
 export default function FundsPage() {
   const wallet = useWallet();

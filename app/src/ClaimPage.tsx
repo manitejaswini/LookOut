@@ -90,7 +90,7 @@ export default function ClaimPage() {
 
           <div className="mono-label">Bounties found for the reports filed here</div>
           {looking && <p className="tiny">Looking…</p>}
-          {bounties && bounties.length === 0 && !looking && <p className="tiny">None yet. A bounty appears after the panel confirms a report, which takes as long as the review rounds.</p>}
+          {bounties && bounties.length === 0 && !looking && <p className="tiny">None yet. A bounty appears after a trusted source corroborates a report and you are a verified human. That can take up to the confirmation window.</p>}
           {bounties && bounties.length > 0 && (
             <ul className="reasons">
               {bounties.map((b) => (
