@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_VERIFY_BASE_URL, HUMAN_ACTION, loadConfig } from './config.ts';
+import { DEFAULT_VERIFY_BASE_URL, HUMAN_ACTION, loadConfig, resolveAction } from './config.ts';
 import { SIGNING_KEY } from './fixtures.ts';
 
 const good = { NEXT_PUBLIC_WORLD_APP_ID: 'app_abc123', NEXT_PUBLIC_WORLD_RP_ID: 'rp_abc123', RP_SIGNING_KEY: SIGNING_KEY };
@@ -44,9 +44,20 @@ test('malformed values give plain problems that never repeat the value, especial
   for (const leaked of ['banana', 'rp-1', badKey, 'prod"']) assert.equal(text.includes(leaked), false, leaked);
 });
 
-test('the verify endpoint can be overridden for tests, and the action is not configurable', () => {
-  const r = loadConfig({ ...good, WORLD_ID_VERIFY_BASE_URL: 'https://stub.test/verify', WORLD_ID_ACTION: 'hijack' });
+test('the verify endpoint can be overridden for tests, and a bad action name in the environment is ignored', () => {
+  const r = loadConfig({ ...good, WORLD_ID_VERIFY_BASE_URL: 'https://stub.test/verify', WORLD_ID_ACTION: 'bad action; drop' });
   assert.ok(r.ok);
   assert.equal(r.config.verifyBaseUrl, 'https://stub.test/verify');
-  assert.equal(r.config.action, HUMAN_ACTION, 'only the code decides what the server signs and accepts');
+  assert.equal(r.config.action, HUMAN_ACTION, 'a malformed value falls back to the built-in action');
+  // the action comes from the SERVER's environment only. A request cannot choose it: see the rp-signature handler test
+});
+
+test('the action can be set from the SERVER environment to match what is registered in the Developer Portal, and bad values fall back', () => {
+  assert.equal(resolveAction({}), HUMAN_ACTION);
+  assert.equal(resolveAction({ WORLD_ID_ACTION: 'lookout-reviewer-seat-v1' }), 'lookout-reviewer-seat-v1');
+  assert.equal(resolveAction({ WORLD_ID_ACTION: '  my.action_2  ' }), 'my.action_2');
+  for (const bad of ['', 'a', 'has space', 'x'.repeat(65), 'semi;colon', '../etc']) assert.equal(resolveAction({ WORLD_ID_ACTION: bad }), HUMAN_ACTION, bad);
+  const r = loadConfig({ NEXT_PUBLIC_WORLD_APP_ID: 'app_abc', NEXT_PUBLIC_WORLD_RP_ID: 'rp_abc', RP_SIGNING_KEY: 'ab'.repeat(32), WORLD_ID_ACTION: 'lookout-reviewer-seat-v1' });
+  assert.ok(r.ok);
+  assert.equal(r.config.action, 'lookout-reviewer-seat-v1');
 });

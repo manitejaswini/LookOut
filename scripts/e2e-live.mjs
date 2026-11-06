@@ -23,7 +23,7 @@ import { addr } from '@arkiv-network/sdk/schema';
 import { CONFIG, encodeReportPayload } from '@lookout/core';
 import { SCHEMAS, createArkivClients, createReport, createVerdict, newReportId, redactSecrets } from '@lookout/arkiv';
 import { createEscrow } from '@lookout/escrow';
-import { HUMAN_ACTION, SqliteSeatStore } from '@lookout/worldid';
+import { resolveAction, SqliteSeatStore } from '@lookout/worldid';
 
 if (!process.argv.includes('--i-know-this-fakes-world-id')) { console.error('Refusing: this marks the throwaway reporter as a verified human WITHOUT World ID. Add --i-know-this-fakes-world-id to confirm this is a demo.'); process.exit(1); }
 const envPath = new URL('../.env', import.meta.url);
@@ -67,7 +67,7 @@ if ((await rep.publicClient.getBalance({ address: reporterAccount.address })) < 
   await deployer.publicClient.waitForTransactionReceipt({ hash });
 }
 const seats = new SqliteSeatStore(process.env.WORLDID_DB ?? join(homedir(), '.lookout', 'worldid', 'worldid.sqlite'));
-seats.enroll('demo_fake_nullifier_e2e_reporter', reporter, HUMAN_ACTION);
+seats.enroll('demo_fake_nullifier_e2e_reporter', reporter, resolveAction());
 seats.close();
 ok('reporter funded and listed as a verified human', reporter.slice(0, 10) + '…');
 

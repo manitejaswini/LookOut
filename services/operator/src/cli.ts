@@ -22,7 +22,7 @@ import { createArkivClients, safeMessage, type EntityWriter, type TrustWriter } 
 import { caseIdFor, targetHash } from '@lookout/core';
 import { createEscrow } from '@lookout/escrow';
 import { loadRegistry } from '@lookout/indexer';
-import { HUMAN_ACTION, SqliteSeatStore } from '@lookout/worldid';
+import { resolveAction, SqliteSeatStore } from '@lookout/worldid';
 import { arkivEvidenceSource, arkivReportSource, arkivStakeFinder } from './adapters.ts';
 import { sqliteJournal } from './journal.ts';
 import { addEvents } from './checkpoint-job.ts';
@@ -62,7 +62,7 @@ const now = () => Math.floor(Date.now() / 1000);
 
 // the people World ID has bound to a wallet. Read fresh each time, so a new verification counts on the next pass.
 const seats = new SqliteSeatStore(process.env.WORLDID_DB ?? join(dataDir, 'worldid', 'worldid.sqlite'));
-const humans = (): ReadonlySet<string> => new Set(seats.wallets(HUMAN_ACTION).map((w) => w.toLowerCase()));
+const humans = (): ReadonlySet<string> => new Set(seats.wallets(resolveAction()).map((w) => w.toLowerCase()));
 
 const registry = loadRegistry();
 const source = arkivReportSource(arkivPublic);

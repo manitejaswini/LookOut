@@ -6,6 +6,7 @@
  *   NEXT_PUBLIC_WORLD_RP_ID    rp_xxxxx    from the Developer Portal (public)
  *   RP_SIGNING_KEY             32-byte hex from the Developer Portal (SECRET, server only)
  *   WORLD_ID_ENVIRONMENT       production (default) | staging | sandbox
+ *   WORLD_ID_ACTION            optional: the action name registered in the Developer Portal (default lookout-verified-human-v1)
  *
  * `production` is the default on purpose: a deployment that forgets to set it rejects test proofs instead of accepting them.
  * Use `staging` only while testing with the World ID simulator.
@@ -13,6 +14,16 @@
 
 /** The action scopes what a proof is for. One human gets one verified-human wallet per action. */
 export const HUMAN_ACTION = 'lookout-verified-human-v1';
+
+/**
+ * The action this deployment uses. World ID only accepts an action that is REGISTERED for the app in the Developer Portal, so the
+ * name has to match what was registered there. WORLD_ID_ACTION sets it from the SERVER's environment (never from a request), and
+ * everything that reads or writes verified humans (this config, the seat store, the operator) must use this one function.
+ */
+export function resolveAction(env: Record<string, string | undefined> = process.env): string {
+  const v = env.WORLD_ID_ACTION?.trim();
+  return v && /^[A-Za-z0-9][A-Za-z0-9._-]{2,63}$/.test(v) ? v : HUMAN_ACTION;
+}
 
 export type WorldEnvironment = 'production' | 'staging' | 'sandbox';
 
@@ -63,7 +74,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       rpId: rpId!,
       signingKeyHex: rawKey!.replace(/^0x/, ''),
       environment: environment as WorldEnvironment,
-      action: HUMAN_ACTION,
+      action: resolveAction(env),
       verifyBaseUrl: env.WORLD_ID_VERIFY_BASE_URL?.trim() || DEFAULT_VERIFY_BASE_URL,
     },
   };
