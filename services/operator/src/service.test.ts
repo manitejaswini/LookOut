@@ -250,3 +250,13 @@ test('MIRROR: the scan does not move past a deposit that is still deferred, so i
   assert.equal(r.mirrored?.waiting, 1);
   assert.equal(journal.detail('service:escrow-cursor'), undefined, 'the cursor stays put');
 });
+
+test('PASSES NEVER OVERLAP: two calls at the same time share one pass, so a deposit is mirrored exactly once', async () => {
+  const { w, service } = rig();
+  const [a, b, c] = await Promise.all([service.tick(), service.tick(), service.tick()]);
+  assert.equal(a, b, 'the second call joined the pass already running');
+  assert.equal(b, c);
+  assert.equal(w.created.filter((x) => x.status === 'locked').length, 1, 'one stake entity, not three');
+  const later = await service.tick(); // and the next call starts a fresh pass
+  assert.notEqual(later, a);
+});

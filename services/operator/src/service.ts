@@ -52,7 +52,14 @@ const DISPUTES = 'service:disputes';
 export function createOperatorService(deps: ServiceDeps) {
   const { journal } = deps;
 
-  async function tick(): Promise<TickReport> {
+  /**
+   * One pass at a time. A pass talks to two chains and can take longer than the timer that starts it, and two overlapping passes both
+   * see the same deposit as "not mirrored yet" and each write it. If a pass is still running, a new call joins it instead of starting another.
+   */
+  let running: Promise<TickReport> | null = null;
+  const tick = (): Promise<TickReport> => (running ??= onePass().finally(() => { running = null; }));
+
+  async function onePass(): Promise<TickReport> {
     const out: TickReport = { errors: [] };
 
     try {
