@@ -9,11 +9,14 @@
   },
   "dependencies": {
     "@fontsource-variable/space-grotesk": "^5.3.0",
+    "@lookout/client": "*",
+    "@lookout/core": "*",
+    "@lookout/worldid": "*",
+    "@worldcoin/idkit": "^4.6.0",
+    "@worldcoin/idkit-core": "^4.6.0",
     "next": "^16.4.5",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1",
-    "@lookout/core": "*",
-    "@lookout/client": "*"
+    "react-dom": "^19.3.1"
   },
   "devDependencies": {
     "@types/node": "26.6.6",

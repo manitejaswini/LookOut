@@ -228,3 +228,13 @@ footer { margin-top: 40px; }
 .topbar nav .nav-pitch { background: var(--neon); padding: 4px 10px; }
 .topbar nav { align-items: center; }
 
+
+/* ---------- reviewer panel / World ID ---------- */
+.verdict.v-ok { background: var(--neon); border-color: var(--ink); }
+.verdict.v-ok .verdict-tag { background: var(--ink); color: #fff; }
+.reviewer .tiny { margin-top: 10px; }
+.setup-steps { margin: 12px 0 8px; padding-left: 20px; font-size: 14px; line-height: 1.6; }
+.setup-steps code { font: 12px var(--mono); background: var(--line-2); padding: 1px 5px; }
+.why-list { list-style: none; margin: 28px 0 0; padding: 0; border-top: 1px solid var(--line); max-width: 44ch; }
+.why-list li { padding: 14px 0; border-bottom: 1px solid var(--line); font-size: 14px; line-height: 1.45; color: var(--navy); }
+.why-list b { color: var(--ink); font-weight: 500; }

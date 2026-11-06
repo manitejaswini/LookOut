@@ -39,18 +39,18 @@ export const WORLDID = {
   statusTitle: 'Debrief, and where we honestly are.',
   debriefLabel: 'Integration debrief',
   debrief: [
-    ['Time to first success', 'Measured when we build it', 'Fill after build'],
-    ['Friction encountered', 'Recorded while building', 'Fill after build'],
-    ['Missing capability or docs', 'Recorded while building', 'Fill after build'],
-    ['Highest-impact improvement', 'Decided after the build', 'Fill after build'],
+    ['Time to first success', 'Not measured yet: it needs a real app id and a real proof from World App', 'Pending'],
+    ['Friction encountered', 'Docs and SDK types disagree (nullifier hex vs decimal). The Portal domain differs between pages. Error codes exist only in the SDK', 'From the build'],
+    ['Missing capability or docs', 'No server-side verify helper, no error-code table, and nothing showing how to enforce the signal', 'From the build'],
+    ['Highest-impact improvement', 'One complete server reference: verify, check the credential, enforce the signal, store the nullifier', 'Our pick'],
   ] as [string, string, string][],
   statusLabel: 'Where we are',
   status: [
-    ['Built so far', 'The reviewer panel design and this pitch. The IDKit integration is not built yet.'],
-    ['Required for the track', 'IDKit in a working app, a proof verified on the server, one success and one alternative path in the demo, and this debrief.'],
+    ['Built and tested', 'The seat flow end to end: server proof checks, the one-seat store, the join screen and both alternative paths. 56 tests, and the real widget runs.'],
+    ['Not done yet', 'A real proof. It needs a World Developer Portal app, then one run with World App or the simulator. Until then, success is shown by tests only.'],
   ] as Pair[],
   line: 'One human, one juror.',
   lineSub: 'World ID tells us someone is unique, and nothing else.',
   limits:
-    'Said upfront: World ID proves uniqueness, not honesty, so jurors still stake, vote blind and lose reputation when wrong · it does not stop a rich human from bribing others · the proof check and the nullifier store are not built yet',
+    'Said upfront: World ID proves uniqueness, not honesty, so jurors still stake, vote blind and lose reputation when wrong · it does not stop a rich human from bribing others · no real World ID proof has been run end to end yet',
 };

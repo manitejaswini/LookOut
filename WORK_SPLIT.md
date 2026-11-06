@@ -191,17 +191,20 @@ The EF prize is judged on privacy shown at the moment of lookup. This section pu
 
 ## World ID integration (Best Use of IDKit track)
 
-The pitch is at `/pitch/worldid`. The integration is **not built yet**, and the track requires a working one. The product event: a staked wallet asks to join the reviewer panel, and World ID proves it is one unique human, so one person gets one seat. Credential: Proof of Human (see the pitch for why it is the minimum sufficient one).
+The pitch is at `/pitch/worldid`, the screen at `/reviewer`, the code in `packages/worldid`. The product event: a wallet asks to join the reviewer panel, and World ID Proof of Human proves it is one unique human, so one person gets one seat. See `packages/worldid/README.md` for the flow and `packages/worldid/DEBRIEF.md` for the track's debrief.
 
-| # | Task | Owner | Done when |
+| # | Task | Owner | Status |
 | --- | --- | --- | --- |
-| WID1 | Check the IDKit docs for the current setup: app and action ids, the exact credential names, and how a proof is verified | A | A short note in the PR with the findings |
-| WID2 | "Join the panel" screen in the app using IDKit's request widget and the Proof of Human credential | B | A user can start and complete a verification in the app |
-| WID3 | Server-side proof verification in the panel service, storing only the nullifier, one seat per human | A | A valid proof grants a seat, and a second wallet from the same human is rejected |
-| WID4 | The alternative paths: user cancels, no credential, already enrolled | B | Each shows a clear message and the person can still file reports |
-| WID5 | Pitch debrief: time to first success, friction, missing capability or docs, the one highest-impact improvement | both | The "Fill after build" rows on the last World ID slide are filled with real numbers |
+| WID1 | Read the IDKit docs and SDK for setup, credential names and verification | A | **Done.** Findings are in `DEBRIEF.md` (the docs and SDK types disagree in several places) |
+| WID2 | "Join the panel" screen using IDKit's request widget and Proof of Human | A (done for B) | **Done.** `app/src/ReviewerJoin.tsx`. The real widget runs. Tested against a **fake** app id only |
+| WID3 | Server-side verification, nullifier store, one seat per human | A | **Done.** 56 tests. A stand-in for World's verify endpoint is used until there is a real app |
+| WID4 | Alternative paths: cancelled, no credential, already enrolled | A (done for B) | **Done.** Each World error code is mapped to one of the outcomes or to a "setup problem" message |
+| WID5 | Debrief with real numbers | both | **Partly done.** Friction, missing docs and the improvement are written. **Time to first success needs a real proof** |
+| WID6 | **Create the World Developer Portal app, put app id, RP id and signing key in `app/.env.local`, run one real verification** | **you** | **Open.** Needs your own World account. Steps are in `packages/worldid/README.md` |
+| WID7 | Wallet ownership proof (sign a message) before real stake is involved | B | Open |
+| WID8 | Panel service draws jurors from `SqliteSeatStore.wallets()` and additionally requires stake | A | Open, after the escrow |
 
-Do not claim any of this in the pitch until it runs. The last World ID slide already says it is not built.
+Do not claim a real World ID success in the pitch until WID6 is done. The last World ID slide already says success is shown by tests only.
 
 ## Definition of done (whole project)
 
