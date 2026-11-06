@@ -31,12 +31,12 @@ const val = (v) => (v && typeof v === 'object' && 'value' in v ? v.value : v);
 console.log(`wallet ${address.slice(0, 8)}…  reportId ${reportId.slice(0, 8)}…  caseId ${caseId}`);
 
 // stake: created locked, then patched to returned
-const stake = await createStake(writer, { reportId, amountWei: 10_000_000_000_000_000n, escrowTx: `0x${'12'.repeat(32)}` });
+const stake = await createStake(writer, { reportId, amountWei: 1_000_000_000_000_000n, escrowTx: `0x${'12'.repeat(32)}` });
 ok('stake created (locked)', stake.entityKey.slice(0, 12) + '…');
 await setStakeStatus(writer, { entityKey: stake.entityKey, from: 'locked', to: 'returned' });
 const s = (await read('stake', 'reportId', reportId, { status: true, amountWei: true }))[0];
 ok('stake patched', `status=${val(s.status)} amountWei=${val(s.amountWei)}`);
-if (val(s.status) !== 'returned' || String(val(s.amountWei)) !== '10000000000000000') throw new Error('stake round trip failed');
+if (val(s.status) !== 'returned' || String(val(s.amountWei)) !== '1000000000000000') throw new Error('stake round trip failed');
 
 // vote: commit, then reveal by patching
 const salt = newSalt();

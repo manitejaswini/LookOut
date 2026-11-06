@@ -83,9 +83,9 @@ check(found?.ignored === 0, 'no row ignored (every row came from a registered in
 
 /* D -------------------------------------------------------------------- */
 console.log('D. stake mirror from the real Sepolia deposits');
-const sep = createPublicClient({ chain: sepolia, transport: http(ESCROW_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com') });
+const sep = createPublicClient({ chain: sepolia, transport: http(ESCROW_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com', { retryCount: 8, retryDelay: 1500 }) });
 const escrow = createEscrow({ address: ESCROW_ADDRESS, publicClient: sep });
-const FROM = 12078577n; // the deploy block
+const FROM = BigInt(process.env.ESCROW_DEPLOY_BLOCK || 0); // the deploy block
 const deposits = await escrow.depositEvents(FROM);
 const settled = await escrow.settledEvents(FROM);
 check(deposits.length >= 1, 'real Deposited events found on Sepolia', String(deposits.length));
@@ -100,7 +100,7 @@ for (let i = 0; i < 10 && !stakeRow; i++) {
   stakeRow = (await publicClient.select({ status: true, amountWei: true, escrowTx: true }).from(SCHEMAS.stake).where(eq('reportId', first.reportId)).fetch()).entities[0];
   if (!stakeRow) await sleep(2000);
 }
-check(!!stakeRow && String(val(stakeRow.amountWei)) === '10000000000000000', 'stake entity matches the on-chain deposit amount');
+check(!!stakeRow && String(val(stakeRow.amountWei)) === String(first.amount), 'stake entity matches the on-chain deposit amount');
 check(val(stakeRow?.escrowTx) === first.txHash.toLowerCase(), 'stake entity points at the real Sepolia transaction');
 check(val(stakeRow?.status) === 'returned', 'status follows the escrow outcome (confirmed -> returned)', String(val(stakeRow?.status)));
 

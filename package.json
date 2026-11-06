@@ -26,6 +26,7 @@
     "arkiv:trust-smoke": "node scripts/arkiv-trust-smoke.mjs",
     "escrow:deploy": "node scripts/deploy-escrow.mjs",
     "escrow:smoke": "node scripts/escrow-live-smoke.mjs",
-    "panel:live": "node scripts/panel-live-run.mjs"
+    "panel:live": "node scripts/panel-live-run.mjs",
+    "escrow:fund": "node scripts/escrow-fund-pool.mjs"
   }
 }

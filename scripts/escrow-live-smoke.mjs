@@ -9,7 +9,7 @@ import { createEscrow } from '../packages/escrow/src/index.ts';
 if (existsSync('.env')) for (const l of readFileSync('.env', 'utf8').split(/\r?\n/)) { const m = l.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/); if (m && !(m[1] in process.env)) process.env[m[1]] = m[2].replace(/^["']|["']$/g, ''); }
 const { ESCROW_ADDRESS, ARKIV_PRIVATE_KEY, ESCROW_RPC_URL } = process.env;
 if (!ESCROW_ADDRESS || !ARKIV_PRIVATE_KEY) { console.error('Need ESCROW_ADDRESS and ARKIV_PRIVATE_KEY in .env'); process.exit(1); }
-const transport = http(ESCROW_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com');
+const transport = http(ESCROW_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com', { retryCount: 8, retryDelay: 1500 });
 const publicClient = createPublicClient({ chain: sepolia, transport });
 const account = privateKeyToAccount(ARKIV_PRIVATE_KEY);
 const walletClient = createWalletClient({ account, chain: sepolia, transport });

@@ -12,7 +12,9 @@ export const CONFIG = {
   REP_HALF_LIFE_DAYS: 30, // an unrefreshed score halves this often
   REP_MAX: 1000, // scores stop here (weight stops at REP_CAP anyway)
   REPORT_EXPIRY_HOURS: 24,
-  DEPOSIT_ETH: 0.01,
+  DEPOSIT_ETH: 0.001, // testnet demo amount: small enough to repeat on camera. A mainnet value would be much higher
+  BOUNTY_ETH: 0.0005, // paid from the pool for a confirmed report
+  REVIEWER_STAKE_ETH: 0.005, // minimum stake for a reviewer seat
 
   // Snapshots are built as of an epoch block, a multiple of this many blocks (300 x 2 s = 10 minutes), so that
   // independent indexers produce the same bytes and root. Every indexer and client must use the same value.
