@@ -3,9 +3,9 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { targetHash } from '@lookout/core';
+import { CONFIG, targetHash } from '@lookout/core';
 import { SCHEMAS } from './schemas.ts';
-import { createAttestation, createReport, createVerdict, refreshVerdict, type EntityWriter } from './writers.ts';
+import { createAttestation, createReport, createSnapshot, createVerdict, refreshVerdict, type EntityWriter } from './writers.ts';
 
 const blocks = (e: unknown) => BigInt((e as { minLifetime: bigint | string | number }).minLifetime);
 
@@ -152,4 +152,32 @@ test('the writers never ask for permissionless extension', async () => {
   await createVerdict(client, { kind: 'domain', value: 'a.example', sourceType: 'feed', sourceId: 'f', level: 'warn' });
   await createAttestation(client, { kind: 'domain', value: 'a.example', claim: 'legit' });
   for (const c of calls) assert.equal('permissionlessExtension' in ((c.args[2] as { flags: object }).flags ?? {}), false);
+});
+
+/* ---------- snapshot ---------- */
+
+const ROOT = `0x${'ab'.repeat(32)}`;
+
+test('createSnapshot: writes the snapshot schema with the read-only flag and the snapshot lifetime', async () => {
+  const { client, calls } = fakeClient();
+  await createSnapshot(client, { snapshotId: 'snap-297000', bucketCount: 16384, rootHash: ROOT, indexerId: 'lookout-indexer-1' });
+  const { schema, values, options } = lastCreate(calls);
+  assert.equal(schema, SCHEMAS.snapshot);
+  assert.deepEqual(values, { snapshotId: 'snap-297000', bucketCount: 16384, rootHash: ROOT, indexerId: 'lookout-indexer-1' });
+  assert.equal(options.flags.readonly, true);
+  assert.equal(blocks(options.expiration), BigInt(CONFIG.SNAPSHOT_DAYS) * 43_200n);
+});
+
+test('createSnapshot: bad input is refused before anything is sent', async () => {
+  const { client, calls } = fakeClient();
+  const ok = { snapshotId: 'snap-1', bucketCount: 16384, rootHash: ROOT, indexerId: 'idx-1' };
+  for (const bad of [
+    { snapshotId: '' }, { snapshotId: 'has space' }, { snapshotId: 'x'.repeat(65) },
+    { indexerId: 'UPPER' }, { indexerId: '' },
+    { rootHash: '0xdead' }, { rootHash: ROOT.toUpperCase().replace('0X', '0x') },
+    { bucketCount: 1 }, { bucketCount: 3 }, { bucketCount: 16383 }, { bucketCount: 2 ** 25 }, { bucketCount: 1.5 },
+  ]) {
+    await assert.rejects(createSnapshot(client, { ...ok, ...bad }), Error, JSON.stringify(bad));
+  }
+  assert.equal(calls.length, 0, 'nothing reached the chain');
 });

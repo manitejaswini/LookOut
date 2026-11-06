@@ -9,6 +9,8 @@ import { readFileSync } from 'node:fs';
  * - attesters:  PLACEHOLDER allowlist of wallets whose attestations are honoured. Real proof of control
  *               (deployer signature, ENS, DNS) is still an open question, so until it exists an attestation
  *               from anyone else is ignored.
+ * - indexers:   wallets allowed to publish `snapshot` roots, each tied to ONE indexerId. A client trusts a table only if
+ *               its root was published by one of these (arkiv/snapshot-format.md, "Publishing on Arkiv").
  * - panel:      the one wallet whose rulings count. null means no rulings are honoured.
  * - reputation: the reputation checkpoint, address -> score. Unknown wallets are 0, so a fresh wallet weighs 0.
  *               All indexers must use the same checkpoint or their snapshot roots will differ.
@@ -19,8 +21,14 @@ export interface RegistrySource {
   address: string; // lowercase
 }
 
+export interface RegistryIndexer {
+  indexerId: string;
+  address: string; // lowercase
+}
+
 export interface Registry {
   sources: RegistrySource[];
+  indexers: RegistryIndexer[];
   attesters: string[]; // lowercase
   panel: string | null; // lowercase
   reputation: Record<string, number>; // lowercase address -> score
@@ -51,6 +59,15 @@ export function parseRegistry(input: unknown): Registry {
   });
   if (sources.length >= 65535) throw new Error('registry: too many sources for a 2-byte sourceIdx');
 
+  const seenIndexers = new Set<string>();
+  const indexers = (Array.isArray(j.indexers) ? j.indexers : []).map((x, i): RegistryIndexer => {
+    const o = (x ?? {}) as Record<string, unknown>;
+    if (typeof o.indexerId !== 'string' || !/^[a-z0-9._-]{1,64}$/.test(o.indexerId)) throw new Error(`registry: indexers[${i}].indexerId must be 1 to 64 of a-z 0-9 . _ -`);
+    if (seenIndexers.has(o.indexerId)) throw new Error(`registry: duplicate indexerId ${o.indexerId}`);
+    seenIndexers.add(o.indexerId);
+    return { indexerId: o.indexerId, address: address(`indexers[${i}].address`, o.address) };
+  });
+
   const attesters = (Array.isArray(j.attesters) ? j.attesters : []).map((a, i) => address(`attesters[${i}]`, a));
   const panel = j.panel == null ? null : address('panel', j.panel);
 
@@ -59,7 +76,7 @@ export function parseRegistry(input: unknown): Registry {
     if (typeof score !== 'number' || !Number.isFinite(score) || score < 0) throw new Error(`registry: reputation for ${a} must be a number >= 0`);
     reputation[address('reputation key', a)] = score;
   }
-  return { sources, attesters, panel, reputation };
+  return { sources, indexers, attesters, panel, reputation };
 }
 
 export function loadRegistry(path: string | URL = new URL('../registry.json', import.meta.url)): Registry {

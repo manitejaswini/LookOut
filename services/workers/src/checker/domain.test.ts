@@ -183,7 +183,7 @@ test('Lookout can flag a destination it already blocks, via the indexer state', 
     attrs: { targetHash: hash, sourceType: 'checker', sourceId: 'lookout-checker', level: 'block', proofHash: `0x${'11'.repeat(32)}` },
   }];
   const { targets, dropped } = buildTargets(entities, timing, registry);
-  const state: IndexState = { targets, dropped, timing, entityCount: 1, syncedAt: 1 };
+  const state: IndexState = { targets, dropped, entities, timing, epoch: timing, epochTargets: targets, entityCount: 1, syncedAt: 1 };
   const src = indexFlagSource(state);
   assert.match(src.isFlagged('domain', 'blocked-by-lookout.example') ?? '', /blocked by Lookout/);
   assert.equal(src.isFlagged('domain', 'something-else.example'), undefined);

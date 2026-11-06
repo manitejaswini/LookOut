@@ -13,6 +13,7 @@ function fakeReader(rowsByKind: Partial<Record<IndexedKind, RawRow[]>>) {
   const calls: { kind: IndexedKind; after?: string }[] = [];
   const reader: ReaderClient = {
     async getBlockTiming() { return timing; },
+    async getBlockTime() { return timing.currentBlockTime; },
     async fetchPage(kind, after) {
       calls.push({ kind, after });
       const rows = (rowsByKind[kind] ?? []).filter((r) => !after || r.key > after).sort((a, b) => (a.key < b.key ? -1 : 1));
@@ -79,6 +80,7 @@ test('if Arkiv fails halfway, the previous data is kept', async () => {
   await syncStore(store, fakeReader({ report: [makeRow(1)] }).reader);
   const broken: ReaderClient = {
     async getBlockTiming() { return timing; },
+    async getBlockTime() { return timing.currentBlockTime; },
     async fetchPage(kind) { if (kind === 'verdict') throw new Error('rpc down'); return []; },
   };
   await assert.rejects(syncStore(store, broken), /rpc down/);

@@ -23,6 +23,8 @@ export interface BlockTiming {
 /** What the indexer needs from Arkiv. A fake with this shape is used in tests. */
 export interface ReaderClient {
   getBlockTiming(): Promise<BlockTiming>;
+  /** unix seconds of a past block, exactly as the chain recorded it. Block times drift, so this is never computed */
+  getBlockTime(block: number): Promise<number>;
   /** one page (at most 100 rows) of a kind, ordered by $key, starting after `afterKey` */
   fetchPage(kind: IndexedKind, afterKey?: string): Promise<RawRow[]>;
 }

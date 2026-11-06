@@ -54,7 +54,7 @@ h  = keccak256( S ) mod n
 p  = ( k_s + h ) mod n          // private key of the stealth address
 ```
 
-1. Look up your own `reportId` over PIR to get `R`.
+1. Look up your own `reportId` to get `R`. **Open:** the snapshot format v0 (`arkiv/snapshot-format.md`) has no bounty record, so this cannot go over PIR yet. Until it does, `R` is read from the `bounty` entity on Arkiv directly, which tells Arkiv which report you are asking about (not which address is yours). Adding a bounty record kind to the snapshot is a change to Dev A's contract; the key would be `keccak256("lookout.bounty-key.v0" | reportId)` and the body `tier (1) | R (33)`.
 2. Derive `p` and check that `p` controls the address that holds the funds (`addressFromPrivateKey(p) == stealthAddress`).
 3. Sweep: send `balance - gasPrice * 21000` to a **fresh destination address**. No relayer and no funding transaction, because the stealth address already holds the ETH it needs.
 

@@ -101,11 +101,26 @@ export function recordSize(r: TargetRecord): number {
   return RECORD_HEADER_BYTES + Math.min(r.signals.length, MAX_SIGNALS_PER_TARGET) * SIGNAL_BYTES;
 }
 
-/** keeps the strongest signals so that every indexer drops the same ones */
+/**
+ * Keeps at most MAX_SIGNALS_PER_TARGET signals, the same ones on every indexer.
+ *
+ * Scoring only uses the strongest signal of each source type, so those are kept FIRST (strongest type first).
+ * Plain "top 4 by weight" would let a flood of full-weight reports of one type, with keys that sort low,
+ * push a real checker or feed signal out of the table and downgrade a genuine block to a warning.
+ * Leftover slots are filled with the next strongest signals. Ties break on entityKey ascending.
+ */
 export function topSignals(signals: SnapshotSignal[]): SnapshotSignal[] {
-  return [...signals]
-    .sort((a, b) => b.weight - a.weight || (a.entityKey < b.entityKey ? -1 : a.entityKey > b.entityKey ? 1 : 0))
-    .slice(0, MAX_SIGNALS_PER_TARGET);
+  const order = (a: SnapshotSignal, b: SnapshotSignal) =>
+    b.weight - a.weight || (a.entityKey < b.entityKey ? -1 : a.entityKey > b.entityKey ? 1 : 0);
+  const sorted = [...signals].sort(order);
+  const bestOfType = new Map<SourceType, SnapshotSignal>();
+  for (const s of sorted) if (!bestOfType.has(s.sourceType)) bestOfType.set(s.sourceType, s);
+  const picked = [...bestOfType.values()].sort(order).slice(0, MAX_SIGNALS_PER_TARGET);
+  for (const s of sorted) {
+    if (picked.length >= MAX_SIGNALS_PER_TARGET) break;
+    if (!picked.includes(s)) picked.push(s);
+  }
+  return picked.sort(order);
 }
 
 export function encodeRecord(r: TargetRecord): Uint8Array {

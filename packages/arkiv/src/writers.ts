@@ -55,6 +55,37 @@ const result = (r: { entityKey: string; txHash: string; expiresAt: bigint | numb
 /** drops keys whose value is undefined, so optional columns are simply left out */
 const defined = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
 
+/* ---------- snapshot ---------- */
+
+export interface SnapshotInput {
+  snapshotId: string;
+  bucketCount: number;
+  rootHash: string;
+  indexerId: string;
+}
+
+const SNAPSHOT_ID = /^[A-Za-z0-9._-]{1,64}$/;
+const INDEXER_ID = /^[a-z0-9._-]{1,64}$/;
+
+/**
+ * An indexer publishes the root of the table it built, so clients can check what PIR servers serve against
+ * something the servers do not control. Only a wallet in the indexer registry is trusted to do this.
+ */
+export async function createSnapshot(client: EntityWriter, input: SnapshotInput): Promise<WriteResult> {
+  if (!SNAPSHOT_ID.test(input.snapshotId)) throw new Error('snapshotId must be 1 to 64 of A-Z a-z 0-9 . _ -');
+  if (!INDEXER_ID.test(input.indexerId)) throw new Error('indexerId must be 1 to 64 of a-z 0-9 . _ -');
+  if (!HEX32.test(input.rootHash)) throw new Error('rootHash must be 0x followed by 64 lowercase hex digits');
+  if (!Number.isInteger(input.bucketCount) || input.bucketCount < 2 || (input.bucketCount & (input.bucketCount - 1)) !== 0 || input.bucketCount > 2 ** 24) {
+    throw new Error('bucketCount must be a power of two between 2 and 16,777,216');
+  }
+  const out = await client.createEntity(
+    SCHEMAS.snapshot,
+    { snapshotId: input.snapshotId, bucketCount: input.bucketCount, rootHash: input.rootHash, indexerId: input.indexerId },
+    { expiration: LIFETIMES.snapshot(), flags: CREATION_FLAGS.snapshot },
+  );
+  return result(out);
+}
+
 /* ---------- report ---------- */
 
 export interface ReportInput {

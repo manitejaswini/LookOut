@@ -1,67 +1,56 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { targetHash } from '@lookout/core';
-import type { Signal } from '@lookout/core';
-import { createClient, inferKind, LookupError, type LookupResponse } from './client.ts';
+import type { CheckResult } from '@lookout/core';
+import { createClient, inferKind, LookupError } from './client.ts';
 
-const sig = (sourceType: Signal['sourceType'], weight: number): Signal => ({
-  entityId: `e-${sourceType}`, sourceType, sourceId: 's', level: 'block', weight, ageSeconds: 10, note: '',
+// What Dev A's indexer returns from GET /lookup: a CheckResult plus `private: false` and the hash.
+const result = (over: Partial<CheckResult> = {}): CheckResult & { private: false; targetHash: string } => ({
+  verdict: 'unknown', disputed: false, reasons: [], snapshotId: 'plain-123', verified: false,
+  headline: 'No signal found.', typeScores: {}, strongTypes: 0, private: false, targetHash: '0xabc', ...over,
 });
-
-const fakeFetch = (body: LookupResponse, seen: string[] = [], status = 200) =>
+const fakeFetch = (body: unknown, seen: string[] = [], status = 200) =>
   (async (url: string) => {
     seen.push(url);
     return { ok: status === 200, status, json: async () => body } as Response;
   }) as unknown as typeof fetch;
 
-const body = (over: Partial<LookupResponse> = {}): LookupResponse =>
-  ({ snapshotId: 'snap-9', disputed: false, signals: [], ...over });
-
-test('queries by the target hash, never the raw target', async () => {
+test('asks the indexer by kind and value (this path is NOT private)', async () => {
   const seen: string[] = [];
-  const c = createClient({ indexerUrl: 'http://idx/', fetch: fakeFetch(body(), seen) });
+  const c = createClient({ indexerUrl: 'http://idx/', fetch: fakeFetch(result(), seen) });
   await c.checkTarget('Evil.Example.com');
-  assert.equal(seen[0], `http://idx/lookup?targetHash=${targetHash('domain', 'evil.example.com')}`);
-  assert.ok(!seen[0].includes('evil'));
+  assert.equal(seen[0], 'http://idx/lookup?kind=domain&value=Evil.Example.com');
 });
 
-test('two strong source types block, and the snapshot id comes from the indexer', async () => {
-  const c = createClient({ indexerUrl: 'http://idx', fetch: fakeFetch(body({ signals: [sig('feed', 1), sig('checker', 1)] })) });
+test('the indexer-side fields are stripped, the result is a plain CheckResult', async () => {
+  const c = createClient({ indexerUrl: 'http://idx', fetch: fakeFetch(result({ verdict: 'block' })) });
   const r = await c.checkTarget('scam.xyz');
   assert.equal(r.verdict, 'block');
-  assert.equal(r.snapshotId, 'snap-9');
+  assert.ok(!('private' in r) && !('targetHash' in r));
 });
 
-test('a plain lookup is never reported as verified', async () => {
-  const c = createClient({ indexerUrl: 'http://idx', fetch: fakeFetch(body()) });
+test('a plain lookup is never reported as verified, whatever the server says', async () => {
+  const c = createClient({ indexerUrl: 'http://idx', fetch: fakeFetch(result({ verified: true })) });
   assert.equal((await c.checkTarget('nothing.example')).verified, false);
 });
 
-test('no signals is unknown, not safe', async () => {
-  const c = createClient({ indexerUrl: 'http://idx', fetch: fakeFetch(body()) });
-  assert.equal((await c.checkTarget('nothing.example')).verdict, 'unknown');
-});
-
-test('disputed flag and ruling pass through to scoring', async () => {
-  const c = createClient({ indexerUrl: 'http://idx', fetch: fakeFetch(body({ disputed: true, signals: [sig('community', 0)] })) });
-  const r = await c.checkTarget('orbit.app');
-  assert.equal(r.disputed, true);
-  assert.equal(r.verdict, 'warn');
-  const c2 = createClient({ indexerUrl: 'http://idx', fetch: fakeFetch(body({ ruling: 'block' })) });
-  assert.equal((await c2.checkTarget('0x5fd9a1e4b7c3920b6a8e1d04c7f23b9a6e5d1c08')).verdict, 'block');
+test('values are URL-encoded', async () => {
+  const seen: string[] = [];
+  await createClient({ indexerUrl: 'http://idx', fetch: fakeFetch(result(), seen) }).checkTarget('https://a.example/x?y=1&z=2');
+  assert.ok(seen[0].endsWith('value=https%3A%2F%2Fa.example%2Fx%3Fy%3D1%26z%3D2'));
 });
 
 test('indexer failures surface as LookupError', async () => {
   const down = createClient({ indexerUrl: 'http://idx', fetch: (async () => { throw new Error('ECONNREFUSED'); }) as unknown as typeof fetch });
   await assert.rejects(down.checkTarget('a.example'), LookupError);
-  const bad = createClient({ indexerUrl: 'http://idx', fetch: fakeFetch(body(), [], 500) });
+  const bad = createClient({ indexerUrl: 'http://idx', fetch: fakeFetch(result(), [], 500) });
   await assert.rejects(bad.checkTarget('a.example'), LookupError);
 });
 
 test('malformed targets are rejected before any request', async () => {
   const seen: string[] = [];
-  const c = createClient({ indexerUrl: 'http://idx', fetch: fakeFetch(body(), seen) });
+  const c = createClient({ indexerUrl: 'http://idx', fetch: fakeFetch(result(), seen) });
   await assert.rejects(c.checkTarget('not a target'));
+  await assert.rejects(c.checkTarget('0x123'));
   assert.equal(seen.length, 0);
 });
 

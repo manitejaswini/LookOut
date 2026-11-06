@@ -3,6 +3,7 @@ import { key as keyValue } from '@arkiv-network/sdk/schema';
 import { SCHEMAS } from '@lookout/arkiv';
 import type { BlockTiming, IndexedKind, RawRow, ReaderClient } from './types.ts';
 import { INDEXED_KINDS } from './types.ts';
+import { epochOf } from './snapshot.ts';
 
 /** Arkiv returns at most 100 rows per page (MAX_LIMIT, checked in packages/arkiv). */
 export const PAGE_SIZE = 100;
@@ -49,6 +50,10 @@ export function arkivReaderClient(publicClient: AnyPublicClient): ReaderClient {
       const t = await publicClient.getBlockTiming();
       return { currentBlock: Number(t.currentBlock), currentBlockTime: Number(t.currentBlockTime), blockDuration: Number(t.blockDuration) };
     },
+    async getBlockTime(block) {
+      const b = await publicClient.getBlock({ blockNumber: BigInt(block) });
+      return Number(b.timestamp);
+    },
     async fetchPage(kind, afterKey) {
       const select: Record<string, true> = Object.fromEntries(
         ['$key', '$creator', '$owner', '$createdAt', '$expiresAt', ...FIELDS[kind]].map((f) => [f, true as const]),
@@ -83,7 +88,7 @@ export interface SyncResult {
 
 /** Reads everything and replaces the store in one transaction. This full read IS the "rebuild from Arkiv" path. */
 export async function syncStore(
-  store: { replaceAll(rows: { kind: IndexedKind; row: RawRow }[], timing: BlockTiming): void },
+  store: { replaceAll(rows: { kind: IndexedKind; row: RawRow }[], timing: BlockTiming, epoch?: BlockTiming): void },
   reader: ReaderClient,
 ): Promise<SyncResult> {
   const timing = await reader.getBlockTiming();
@@ -94,6 +99,9 @@ export async function syncStore(
     counts[kind] = got.length;
     for (const row of got) rows.push({ kind, row });
   }
-  store.replaceAll(rows, timing);
+  const epochBlock = epochOf(timing.currentBlock);
+  const epochTime = epochBlock === timing.currentBlock ? timing.currentBlockTime : await reader.getBlockTime(epochBlock);
+  const epoch: BlockTiming = { currentBlock: epochBlock, currentBlockTime: epochTime, blockDuration: timing.blockDuration };
+  store.replaceAll(rows, timing, epoch);
   return { counts, total: rows.length, timing };
 }

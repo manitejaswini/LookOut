@@ -45,7 +45,7 @@ signal
 All integers are big endian. A record is `10 + 41 x signalCount` bytes, so 51 to 174 bytes.
 
 Rules for what goes in a record (these decide the bytes, so all indexers must follow them):
-- A target keeps at most **4 signals**: the strongest by `weight`, ties broken by `entityKey` ascending. Others are dropped.
+- A target keeps at most **4 signals**. The strongest signal of **each source type** is kept first (scoring only uses one per type), strongest type first. Any free slots are filled with the next strongest by `weight`. Ties break on `entityKey` ascending. Others are dropped. Plain "top 4 by weight" is not allowed: a flood of full-weight reports of one type could push a real checker or feed signal out of the table and turn a genuine block into a warning (found by `npm run attack`).
 - `weight` is the final report weight the indexer computed from the reputation checkpoint (see "Dependencies" below). The client does **not** recompute reputation. It trusts the verified table.
 - `flags.proof` is set if any signal has a `proofHash`. `flags.disputed` is set if an unexpired `attestation` exists for the target. `ruling` bits come from the latest unexpired `ruling`.
 - Expired entities are not included. `createdAt` lets the client show "3 minutes ago".
@@ -99,6 +99,15 @@ Each indexer publishes a `lookout.v0.snapshot` entity (see `arkiv/schema.md`) wi
 | `indexerId` | which indexer |
 
 Several independent indexers publish a root for the same `snapshotId`. A client accepts a table only if its computed root equals one of those published roots, and it should prefer the one most indexers agree on.
+
+Implemented: `npm run indexer:publish` (`services/indexer/src/publish.ts`). It refuses to publish unless the wallet is listed under `indexers` in `services/indexer/registry.json`, does nothing if the same root is already there, and refuses to publish a **different** root for the same snapshot id (an indexer must not contradict itself).
+
+How a client decides to believe a table (`packages/arkiv/src/roots.ts`, browser-safe, import as `@lookout/arkiv/roots`):
+1. read every `snapshot` entity for the snapshot id from Arkiv, with no access key (a key would identify the visitor);
+2. keep only rows whose `$creator` is the registered wallet **for that same `indexerId`**: an impostor using a trusted id from another wallet, and a trusted wallet using another indexer's id, are both ignored;
+3. accept a root only if at least `minIndexers` different trusted indexers published it. The default is 1; raise it once a second independent indexer exists. One indexer publishing twice counts once.
+
+If Arkiv does not vouch for the table, the lookup **fails**. It does not fall back to an unverified answer. The wallet page can be told to skip the check with `NEXT_PUBLIC_PIR_VERIFY=off`, and then it shows UNVERIFIED.
 
 ## PIR server endpoints
 
@@ -164,4 +173,9 @@ These come from a simple greedy placement with uniform record sizes. A real mix 
 1. Is a 41-byte signal worth carrying the full 32-byte `entityKey`, or should it be a shorter prefix that the client resolves? The full key lets a user inspect the exact entity, which supports the "check how Lookout decided" story, so v0 keeps it.
 2. Should `bucketCount` grow automatically when the build fails, or only by a manual decision?
 3. Does the client need a signed freshness proof, so a server cannot serve an old snapshot? v0 relies on the client comparing to the latest root on Arkiv.
-4. **Which block does a snapshot describe? (found while building the indexer)** The indexer names a snapshot `snap-<block>` after the Arkiv block it read, and the root depends on that id and on every entity's age. Two indexers that sync at even slightly different blocks therefore get **different roots from identical data**, so "several independent indexers publish the same root" does not yet hold. Fixes to decide between: (a) indexers read **as of an agreed block** (for example a multiple of 300 blocks, about 10 minutes), if Arkiv can serve queries at a past block, which I have not checked, or (b) derive `createdAt` and the id from the entity data only, never from the block the indexer happened to read at. This must be settled before Phase 4's "wipe and rebuild gives the same root" test.
+4. **Which block does a snapshot describe? (resolved: epochs.)** A snapshot is built **as of an epoch block**, the latest multiple of `SNAPSHOT_EPOCH_BLOCKS` (300 blocks, about 10 minutes, in `packages/core/src/config.ts`), and the id is `snap-<epochBlock>`. This makes the bytes, and so the root, depend only on the chain at that block and not on when an indexer ran. The rules, implemented in `services/indexer/src/snapshot.ts` and tested in `epoch.test.ts`:
+   - The epoch block's **timestamp is read from the chain** (`getBlock`), not computed. Rabdi's blocks drift from 2 s (3,000 blocks took 6,002 s), so arithmetic would give indexers different `createdAt` values.
+   - Only entities **created by the epoch block** count.
+   - Only entities that **stay alive for one more epoch** count (`expiresBlock > epoch + SNAPSHOT_EPOCH_BLOCKS`). Arkiv hides expired entities, so a slower indexer could not see one that expired between the epoch block and its own sync, and the roots would differ.
+   - Weights come from the registry's reputation checkpoint, which must be the same for every indexer.
+   - **Cost:** a new report appears at the next epoch boundary (up to 10 minutes), and an entity leaves snapshots up to 10 minutes before it expires on Arkiv. An entity changed or deleted after the epoch block can still make roots differ until the next epoch. Indexers should sync soon after an epoch boundary.

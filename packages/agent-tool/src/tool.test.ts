@@ -1,18 +1,19 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createClient } from '@lookout/client';
-import type { LookupResponse } from '@lookout/client';
-import type { Signal } from '@lookout/core';
+import { createClient, LookupError, type LookoutClient } from '@lookout/client';
+import { scoreTarget, type ScoringInput, type Signal } from '@lookout/core';
 import { CHECK_TARGET_TOOL, decide, guardTransfer, runCheckTarget } from './tool.ts';
 
 const sig = (sourceType: Signal['sourceType']): Signal => ({
   entityId: `e-${sourceType}`, sourceType, sourceId: 's', level: 'block', weight: 1, ageSeconds: 1, note: '',
 });
-const clientFor = (body: Partial<LookupResponse>, status = 200) =>
-  createClient({
-    indexerUrl: 'http://idx',
-    fetch: (async () => ({ ok: status === 200, status, json: async () => ({ snapshotId: 'snap-1', disputed: false, signals: [], ...body }) })) as unknown as typeof fetch,
-  });
+/** A client that answers from the real scoring rule, or fails like a down indexer. */
+const clientFor = (over: Partial<ScoringInput> = {}, failWith?: string): LookoutClient => ({
+  async checkTarget() {
+    if (failWith) throw new LookupError(failWith);
+    return { ...scoreTarget({ signals: [], disputed: false, ...over }), snapshotId: 'snap-1', verified: true };
+  },
+});
 
 test('tool definition is valid tool-use JSON', () => {
   assert.equal(CHECK_TARGET_TOOL.name, 'check_target');
@@ -41,18 +42,21 @@ test('warn asks a human, disputed or not', async () => {
 });
 
 test('unknown proceeds only capped, never as safe', async () => {
-  const { decision } = await guardTransfer(clientFor({}), { value: 'a.example' });
+  const { decision } = await guardTransfer(clientFor(), { value: 'a.example' });
   assert.equal(decision.action, 'proceed_capped');
   assert.match(decision.reason, /not safe/);
 });
 
 test('a failed lookup returns a JSON error and fails closed to a human', async () => {
-  const call = await runCheckTarget(clientFor({}, 500), { value: 'a.example' });
+  const call = await runCheckTarget(clientFor({}, 'indexer returned 500'), { value: 'a.example' });
   assert.equal(call.ok, false);
   assert.equal(decide(call).action, 'ask_human');
 });
 
 test('malformed input is an error result, not an exception', async () => {
-  const call = await runCheckTarget(clientFor({}), { value: 'not a target' });
+  const real = createClient({ indexerUrl: 'http://idx', fetch: (async () => { throw new Error('must not be called'); }) as unknown as typeof fetch });
+  const call = await runCheckTarget(real, { value: 'not a target' });
   assert.equal(call.ok, false);
+  const typo = await runCheckTarget(real, { value: '0x123' });
+  assert.equal(typo.ok, false);
 });

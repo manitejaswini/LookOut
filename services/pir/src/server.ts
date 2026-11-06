@@ -1,15 +1,17 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import { keccak_256 } from '@noble/hashes/sha3.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
+import type { Snapshot } from '@lookout/core';
 import { answer } from '@lookout/pir';
-import type { StoredSnapshot } from './store.ts';
 
 /**
  * One PIR server (A or B). It holds the bucket table and answers XOR queries. It never receives
- * the target, only a random-looking bit vector, and the log records exactly that and nothing else.
+ * the target, only a random-looking bit vector. Per arkiv/snapshot-format.md the log holds the snapshot id,
+ * the vector length and a short hash of the vector, never the vector itself and never the request body.
  */
 export interface PirServerOptions {
   name: string;
-  snapshots: Map<string, StoredSnapshot>;
+  snapshots: Map<string, Snapshot>;
   latest: string;
   /** Called with one line per query. Defaults to console. */
   log?: (line: string) => void;
@@ -77,7 +79,7 @@ export function createPirServer(opts: PirServerOptions): Server & { recent: stri
         let out: Uint8Array;
         try { out = answer(s.buckets, s.bucketCount, vector); } catch (e) { return fail(res, 400, (e as Error).message); }
         const ones = vector.reduce((n, b) => n + b.toString(2).replace(/0/g, '').length, 0);
-        log(`query snapshot=${s.snapshotId} vector=${bytesToHex(vector.slice(0, 12))}… bits_set=${ones}/${s.bucketCount}`);
+        log(`query snapshot=${s.snapshotId} vector_bytes=${vector.length} vector_fp=${bytesToHex(keccak_256(vector).slice(0, 6))} bits_set=${ones}/${s.bucketCount}`);
         return send(res, 200, out, 'application/octet-stream');
       }
       return fail(res, 404, 'not found');
