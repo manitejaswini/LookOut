@@ -21,6 +21,11 @@ import type { WalletState } from './WalletProvider';
 
 /** The most useful single line out of a viem or SDK error, which usually wraps the real reason one or two levels down. */
 export function underlying(e: unknown): string {
+  const text = String((e as { message?: string })?.message ?? e) + ' ' + String(((e as { cause?: { message?: string } })?.cause?.message) ?? '');
+  // EIP-1193 error 4100: the wallet has not given THIS site permission on THIS network (or for this account)
+  if (/not been authorized|UnauthorizedProvider/i.test(text)) {
+    return 'Your wallet has not given this site permission on this network. Open MetaMask, go to Connected sites (or Settings, then Connections), choose localhost:3000, press Edit, tick the Rabdi network and the account, press Update, then press Retry.';
+  }
   const parts: string[] = [];
   let cur: unknown = e;
   for (let i = 0; i < 4 && cur; i++) {

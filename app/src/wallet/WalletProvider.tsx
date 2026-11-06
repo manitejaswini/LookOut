@@ -91,20 +91,23 @@ export function WalletProvider({ children }: { children: ReactNode }) {
   const switchChain = useCallback(async (name: ChainName) => {
     const chain: Chain = chainFor(name);
     const p = provider();
-    const current = toChainId(await p.request({ method: 'eth_chainId' }));
-    if (current === chain.id) return;
+    const target = numberToHex(chain.id);
+    // ALWAYS ask the wallet to switch, even when it is already on this network. Recent MetaMask versions grant a site access network
+    // by network, and a switch request is what makes MetaMask offer that permission. Skipping it when the wallet "is already there"
+    // left the site without permission on the network, and every transaction there failed with "not authorized".
     try {
-      await p.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: numberToHex(chain.id) }] });
+      await p.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: target }] });
     } catch (e) {
-      // 4902: the wallet does not know this chain yet, so add it (the wallet asks the person to approve)
+      // 4902: the wallet does not know this chain yet, so add it (the wallet asks the person to approve), then switch to it
       if ((e as { code?: number }).code !== 4902) throw e;
       await p.request({
         method: 'wallet_addEthereumChain',
         params: [{
-          chainId: numberToHex(chain.id), chainName: chain.name, nativeCurrency: chain.nativeCurrency,
+          chainId: target, chainName: chain.name, nativeCurrency: chain.nativeCurrency,
           rpcUrls: chain.rpcUrls.default.http, blockExplorerUrls: chain.blockExplorers ? [chain.blockExplorers.default.url] : undefined,
         }],
       });
+      await p.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: target }] }).catch(() => {});
     }
   }, [provider]);
 
