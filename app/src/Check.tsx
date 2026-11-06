@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { TARGETS, checkTarget, findTarget } from './mock';
 import { fmtAge } from './hooks';
-import { SNAPSHOT_ID } from './scoring';
-import type { CheckResult } from './types';
+import { SNAPSHOT_ID } from '@lookout/core';
+import type { CheckResult } from '@lookout/core';
 
 const STEPS = [
   'Hash the target on this device',

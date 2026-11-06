@@ -1,5 +1,5 @@
-import { CONFIG } from './config';
-import type { CheckResult, Signal, SourceType, Target } from './types';
+import { CONFIG } from './config.ts';
+import type { CheckResult, Signal, SourceType, Target } from './types.ts';
 
 /** report weight = min(1, rep / cap) */
 export const reportWeight = (rep: number) => Math.min(1, Math.max(0, rep / CONFIG.REP_CAP));

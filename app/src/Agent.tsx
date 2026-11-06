@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { TARGETS, checkTarget } from './mock';
-import type { TargetKind } from './types';
+import type { TargetKind } from '@lookout/core';
 
 export default function Agent() {
   const [kind, setKind] = useState<TargetKind>('domain');

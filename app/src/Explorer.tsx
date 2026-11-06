@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { CONFIG } from './config';
+import { CONFIG } from '@lookout/core';
 import { SEED_ENTITIES } from './mock';
 import { fmtLeft, useNow } from './hooks';
-import type { ArkivEntity } from './types';
+import type { ArkivEntity } from '@lookout/core';
 
 const hex = () => Math.floor(Math.random() * 0xffff).toString(16).padStart(4, '0');
 

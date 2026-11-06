@@ -1,8 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { CONFIG } from './config';
-import { fakeReports, scoreTarget } from './scoring';
+import { CONFIG } from '@lookout/core';
+import { fakeReports, scoreTarget } from '@lookout/core';
 import { TARGETS } from './mock';
 
 const legit = TARGETS.find((t) => t.value === 'orbit-bridge.app')!;

@@ -1,5 +1,5 @@
-import type { ArkivEntity, Signal, Target } from './types';
-import { scoreTarget, emptyTarget } from './scoring';
+import type { ArkivEntity, Signal, Target } from '@lookout/core';
+import { scoreTarget, emptyTarget } from '@lookout/core';
 
 const sig = (
   entityId: string, sourceType: Signal['sourceType'], sourceId: string,
