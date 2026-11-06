@@ -66,12 +66,13 @@ test('syncStore reads every kind and replaces the store in one go', async () => 
     verdict: [makeRow(3)],
     attestation: [],
     ruling: [makeRow(4)],
+    reputation: [makeRow(5)],
   });
   const store = new Store();
   const r = await syncStore(store, reader);
-  assert.deepEqual(r.counts, { report: 2, verdict: 1, attestation: 0, ruling: 1 });
-  assert.equal(r.total, 4);
-  assert.equal(store.count(), 4);
+  assert.deepEqual(r.counts, { report: 2, verdict: 1, attestation: 0, ruling: 1, reputation: 1 });
+  assert.equal(r.total, 5);
+  assert.equal(store.count(), 5);
   assert.deepEqual(store.timing(), timing);
 });
 

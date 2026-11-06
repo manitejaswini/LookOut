@@ -14,6 +14,7 @@ export const FIELDS: Record<IndexedKind, string[]> = {
   verdict: ['targetHash', 'sourceType', 'sourceId', 'level', 'proofHash', 'reason'],
   attestation: ['targetHash', 'claim'],
   ruling: ['caseId', 'targetHash', 'outcome'],
+  reputation: ['wallet', 'snapshotId', 'score'],
 };
 
 /** A column comes back as { type, value } and a system field as a plain value. Flatten both to a string. */
