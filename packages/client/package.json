@@ -14,8 +14,7 @@
   },
   "dependencies": {
     "@lookout/core": "*",
-    "@lookout/pir": "*",
-    "@lookout/snapshot": "*"
+    "@lookout/pir": "*"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",

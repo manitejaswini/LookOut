@@ -45,7 +45,7 @@ signal
 All integers are big endian. A record is `10 + 41 x signalCount` bytes, so 51 to 174 bytes.
 
 Rules for what goes in a record (these decide the bytes, so all indexers must follow them):
-- A target keeps at most **4 signals**: the strongest by `weight`, ties broken by `entityKey` ascending. Others are dropped.
+- A target keeps at most **4 signals**. The strongest signal of **each source type** is kept first (scoring only uses one per type), strongest type first. Any free slots are filled with the next strongest by `weight`. Ties break on `entityKey` ascending. Others are dropped. Plain "top 4 by weight" is not allowed: a flood of full-weight reports of one type could push a real checker or feed signal out of the table and turn a genuine block into a warning (found by `npm run attack`).
 - `weight` is the final report weight the indexer computed from the reputation checkpoint (see "Dependencies" below). The client does **not** recompute reputation. It trusts the verified table.
 - `flags.proof` is set if any signal has a `proofHash`. `flags.disputed` is set if an unexpired `attestation` exists for the target. `ruling` bits come from the latest unexpired `ruling`.
 - Expired entities are not included. `createdAt` lets the client show "3 minutes ago".

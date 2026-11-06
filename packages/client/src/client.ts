@@ -1,18 +1,9 @@
-import { emptyTarget, scoreTarget, targetHash } from '@lookout/core';
-import type { CheckResult, Signal, TargetKind } from '@lookout/core';
+import { normalizeTarget } from '@lookout/core';
+import type { CheckResult, TargetKind } from '@lookout/core';
 
-/**
- * What the indexer's plain lookup returns for one targetHash: the raw signals, not a verdict.
- * The client scores them itself, so a wallet never has to trust the indexer's verdict.
- * PROPOSED CONTRACT: Dev A implements `GET /lookup?targetHash=0x...` to return this shape.
- * Phase 4 replaces the transport with PIR; the shape of the answer stays the same.
- */
-export interface LookupResponse {
-  snapshotId: string;
-  disputed: boolean;
-  proof?: string;
-  ruling?: 'block' | 'clear';
-  signals: Signal[];
+/** What a wallet or an agent needs: one question, one answer. Every lookup path implements this. */
+export interface LookoutClient {
+  checkTarget(value: string, kind?: TargetKind): Promise<CheckResult>;
 }
 
 export interface ClientOptions {
@@ -26,34 +17,28 @@ export const inferKind = (value: string): TargetKind =>
 
 export class LookupError extends Error {}
 
-export function createClient({ indexerUrl, fetch: doFetch = fetch }: ClientOptions) {
+/**
+ * The TEMPORARY plain lookup against Dev A's indexer: `GET /lookup?kind=&value=` returns a finished
+ * CheckResult. It is NOT private: the indexer sees exactly what you check, and it does the scoring.
+ * `verified` is always false, because nothing is checked against a root. Use `createPirClient` for the
+ * real thing. This exists for development and as a fallback while PIR servers are not running.
+ */
+export function createClient({ indexerUrl, fetch: doFetch = fetch }: ClientOptions): LookoutClient {
   const base = indexerUrl.replace(/\/+$/, '');
 
-  /**
-   * Same result shape as the mock. `verified` is false until the answer is checked against an
-   * Arkiv snapshot root (Phase 4), so a plain lookup never claims a check it did not do.
-   */
   async function checkTarget(value: string, kind: TargetKind = inferKind(value)): Promise<CheckResult> {
-    const hash = targetHash(kind, value); // throws on malformed input
+    normalizeTarget(kind, value); // throws on malformed input, before any request
     let res: Response;
     try {
-      res = await doFetch(`${base}/lookup?targetHash=${hash}`);
+      res = await doFetch(`${base}/lookup?kind=${kind}&value=${encodeURIComponent(value)}`);
     } catch (e) {
       throw new LookupError(`indexer unreachable: ${(e as Error).message}`);
     }
     if (!res.ok) throw new LookupError(`indexer returned ${res.status}`);
-    const body = (await res.json()) as LookupResponse;
-    const result = scoreTarget({
-      ...emptyTarget(value, kind),
-      signals: body.signals,
-      disputed: body.disputed,
-      proof: body.proof,
-      ruling: body.ruling,
-    });
-    return { ...result, snapshotId: body.snapshotId, verified: false };
+    const { private: _private, targetHash: _hash, ...result } = (await res.json()) as CheckResult & { private?: boolean; targetHash?: string };
+    void _private; void _hash;
+    return { ...result, verified: false };
   }
 
   return { checkTarget };
 }
-
-export type LookoutClient = ReturnType<typeof createClient>;

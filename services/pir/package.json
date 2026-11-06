@@ -13,12 +13,12 @@
   "dependencies": {
     "@lookout/core": "*",
     "@lookout/pir": "*",
-    "@lookout/snapshot": "*",
     "@noble/hashes": "^2.4.0"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
     "typescript": "^7.0.2",
-    "@lookout/client": "*"
+    "@lookout/client": "*",
+    "@lookout/indexer": "*"
   }
 }

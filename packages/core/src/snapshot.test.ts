@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import {
   BUCKET_SIZE, BucketOverflowError, FLAG, bucketHash, bucketIndexes, buildSnapshot, decodeBucket, encodeRecord,
-  findRecord, tableRoot, type SnapshotSignal, type TargetRecord,
+  findRecord, tableRoot, topSignals, type SnapshotSignal, type TargetRecord,
 } from './snapshot.ts';
 import { targetHash } from './target.ts';
 
@@ -148,3 +148,35 @@ test('pinned vector: a fixed one-record snapshot has this root (changing it brea
 
 // Produced by this implementation, so it guards against accidental format drift. It is not an independent check.
 const PINNED_ROOT = '0x9a0bb763f05268fe7d28f98de1cc832050b86ff008c44e1e7f940bc6babc753b';
+
+/* ---------- the 4-signal cap must not let a flood hide a real signal ---------- */
+
+test('topSignals: a flood of one source type cannot push out the strongest signal of another type', () => {
+  const key = (n: number) => `0x${n.toString(16).padStart(64, '0')}`;
+  const sig = (sourceType: SnapshotSignal['sourceType'], weight: number, n: number): SnapshotSignal =>
+    ({ sourceType, level: 'block', weight, sourceIdx: 0, createdAt: 1, entityKey: key(n) });
+  // 50 full-weight community reports whose keys sort BEFORE the real signals, plus a feed and a checker signal.
+  const flood = Array.from({ length: 50 }, (_, i) => sig('community', 1, i + 1));
+  const kept = topSignals([...flood, sig('feed', 1, 0xf001), sig('checker', 1, 0xf002)]);
+  assert.equal(kept.length, 4);
+  assert.ok(kept.some((s) => s.sourceType === 'feed'), 'feed signal survives');
+  assert.ok(kept.some((s) => s.sourceType === 'checker'), 'checker signal survives');
+  assert.ok(kept.some((s) => s.sourceType === 'community'));
+});
+
+test('topSignals: the strongest signal of each type is kept, then the rest fill by weight', () => {
+  const key = (n: number) => `0x${n.toString(16).padStart(64, '0')}`;
+  const sig = (sourceType: SnapshotSignal['sourceType'], weight: number, n: number): SnapshotSignal =>
+    ({ sourceType, level: 'block', weight, sourceIdx: 0, createdAt: 1, entityKey: key(n) });
+  const kept = topSignals([sig('community', 0.9, 1), sig('community', 0.8, 2), sig('community', 0.7, 3), sig('feed', 0.2, 4), sig('checker', 0.1, 5)]);
+  assert.deepEqual(kept.map((s) => [s.sourceType, s.weight]), [['community', 0.9], ['community', 0.8], ['feed', 0.2], ['checker', 0.1]]);
+});
+
+test('topSignals: deterministic whatever the input order, and never more than the cap', () => {
+  const key = (n: number) => `0x${n.toString(16).padStart(64, '0')}`;
+  const all: SnapshotSignal[] = (['community', 'feed', 'checker', 'verifier', 'ruling'] as const).flatMap((t, ti) =>
+    [0.3, 0.6, 0.6].map((w, i) => ({ sourceType: t, level: 'warn' as const, weight: w, sourceIdx: 0, createdAt: 1, entityKey: key(ti * 10 + i + 1) })));
+  const a = topSignals(all);
+  assert.equal(a.length, 4);
+  assert.deepEqual(a, topSignals([...all].reverse()));
+});

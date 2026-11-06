@@ -1,25 +1,24 @@
 // Demo agent: wants to pay three targets, asks Lookout first, aborts on block.
-// Runs against a local fake indexer so it works with no services: `npm run demo -w @lookout/agent-tool`.
-// Pass INDEXER_URL=http://localhost:8787 to use a real one instead.
-import { createClient } from '@lookout/client';
-import type { LookupResponse } from '@lookout/client';
-import { targetHash } from '@lookout/core';
-import type { Signal } from '@lookout/core';
+// Runs with no services (in-memory PIR servers): `npm run demo -w @lookout/agent-tool`.
+// Pass INDEXER_URL=http://localhost:8787 to use the plain indexer instead.
+import { createClient, createPirClient, fakePirWorld } from '@lookout/client';
+import { FLAG, buildSnapshot, targetHash, type TargetRecord } from '@lookout/core';
 import { guardTransfer } from './tool.ts';
 
-const s = (sourceType: Signal['sourceType']): Signal => ({
-  entityId: `ark_${sourceType}`, sourceType, sourceId: 'demo', level: 'block', weight: 1, ageSeconds: 30, note: '',
+// With no services running, the agent talks to two in-memory PIR servers holding a tiny snapshot, through
+// the real private-lookup client. INDEXER_URL=http://localhost:8787 uses Dev A's plain indexer instead.
+const sig = (sourceType: 'feed' | 'checker', sourceIdx: number, n: number) => ({
+  sourceType, level: 'block' as const, weight: 1, sourceIdx, createdAt: Math.floor(Date.now() / 1000) - 30, entityKey: `0x${n.toString(16).padStart(64, '0')}`,
 });
-const SCAM = targetHash('domain', 'claim-arbitrum-airdrop.xyz');
-const fakeIndexer = (async (url: string) => {
-  const h = new URL(url).searchParams.get('targetHash');
-  const body: LookupResponse = { snapshotId: 'snap-demo', disputed: false, signals: h === SCAM ? [s('feed'), s('checker')] : [] };
-  return { ok: true, status: 200, json: async () => body } as Response;
-}) as unknown as typeof fetch;
+const records: TargetRecord[] = [
+  { targetHash: targetHash('domain', 'claim-arbitrum-airdrop.xyz'), flags: FLAG.proof, signals: [sig('feed', 1, 1), sig('checker', 2, 2)] },
+];
+const snap = buildSnapshot('snap-demo', records, 256);
+const world = fakePirWorld(snap);
 
 const client = process.env.INDEXER_URL
   ? createClient({ indexerUrl: process.env.INDEXER_URL })
-  : createClient({ indexerUrl: 'http://fake', fetch: fakeIndexer });
+  : createPirClient({ pairs: [{ a: 'http://server-a.demo', b: 'http://server-b.demo' }], fetch: world.fetch });
 
 for (const task of [
   { say: 'Pay 1.2 ETH to the airdrop claim page', value: 'claim-arbitrum-airdrop.xyz' },

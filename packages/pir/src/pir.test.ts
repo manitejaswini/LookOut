@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BUCKET_SIZE } from '@lookout/snapshot';
+import { BUCKET_SIZE } from '@lookout/core';
 import { answer, combine, queryPair, randomVector, vectorBytes, withBitFlipped } from './pir.ts';
 
 const table = (n: number) => {
@@ -33,7 +33,7 @@ test('the two queries differ in exactly the target bit', () => {
   const { a, b } = queryPair(77, 300);
   const diff = a.map((v, i) => v ^ b[i]);
   assert.equal(popcount(diff), 1);
-  assert.equal(diff[77 >> 3], 0x80 >> (77 & 7));
+  assert.equal(diff[77 >> 3], 1 << (77 & 7)); // lowest bit of each byte is the lowest bucket index
 });
 
 test('each query on its own is random: the target bit is a coin flip, and density is about one half', () => {
@@ -41,8 +41,8 @@ test('each query on its own is random: the target bit is a coin flip, and densit
   let aOnes = 0, bOnes = 0, density = 0;
   for (let t = 0; t < trials; t++) {
     const { a, b } = queryPair(index, n);
-    aOnes += (a[index >> 3] >> (7 - (index & 7))) & 1;
-    bOnes += (b[index >> 3] >> (7 - (index & 7))) & 1;
+    aOnes += (a[index >> 3] >> (index & 7)) & 1;
+    bOnes += (b[index >> 3] >> (index & 7)) & 1;
     density += popcount(a) / n;
   }
   // 2000 fair coin flips: mean 1000, sd ~22. Allow 6 sd.
@@ -58,8 +58,8 @@ test('the same target gives different queries every time', () => {
 
 test('padding bits stay zero, and a server rejects a query that sets them', () => {
   const n = 301;
-  for (let i = 0; i < 50; i++) assert.equal(randomVector(n)[vectorBytes(n) - 1] & 0b00000111, 0);
-  const bad = new Uint8Array(vectorBytes(n)); bad[bad.length - 1] = 1;
+  for (let i = 0; i < 50; i++) assert.equal(randomVector(n)[vectorBytes(n) - 1] & 0b11100000, 0); // 301 buckets: 5 real bits in the last byte
+  const bad = new Uint8Array(vectorBytes(n)); bad[bad.length - 1] = 0b00100000; // bucket 301 does not exist
   assert.throws(() => answer(table(n), n, bad), /past the last bucket/);
 });
 
@@ -69,7 +69,8 @@ test('inputs are validated', () => {
   assert.throws(() => answer(table(10), 10, new Uint8Array(5)), /wrong length/);
   assert.throws(() => answer(new Uint8Array(100), 10, new Uint8Array(2)), /wrong size/);
   assert.throws(() => combine(new Uint8Array(3), new Uint8Array(3)));
-  assert.deepEqual(withBitFlipped(new Uint8Array(2), 9), Uint8Array.of(0, 0x40));
+  assert.deepEqual(withBitFlipped(new Uint8Array(2), 9), Uint8Array.of(0, 0x02));
+  assert.deepEqual(withBitFlipped(new Uint8Array(2), 0), Uint8Array.of(0x01, 0));
 });
 
 test('an unaligned table view still answers correctly', () => {

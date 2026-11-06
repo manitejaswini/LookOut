@@ -13,7 +13,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@lookout/snapshot": "*"
+    "@lookout/core": "*"
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
