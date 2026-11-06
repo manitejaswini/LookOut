@@ -15,7 +15,6 @@ const NAV: [string, string][] = [
   ['/dispute', 'Dispute'],
   ['/verify', 'Verify'],
   ['/funds', 'Funds'],
-  ['/claim', 'Bounty'],
   ['/pitch/arkiv', 'Arkiv pitch'],
   ['/pitch/worldid', 'World ID pitch'],
 ];

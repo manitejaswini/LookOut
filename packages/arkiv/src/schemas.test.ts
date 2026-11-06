@@ -30,7 +30,6 @@ const OPTIONAL: Record<Kind, string[]> = {
   ruling: ['payload'],
   reputation: [],
   snapshot: [],
-  bounty: [], // payload is required: a bounty without an ephemeral key is useless
 };
 
 test('there are exactly seven kinds, and each is a named schema lookout.v0.<kind>', () => {

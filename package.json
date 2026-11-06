@@ -28,7 +28,6 @@
     "escrow:smoke": "node scripts/escrow-live-smoke.mjs",
     "escrow:fund": "node scripts/escrow-fund-pool.mjs",
     "demo:jurors": "node scripts/demo-jurors.mjs",
-    "operator:keys": "node scripts/operator-keys.mjs",
     "operator:run": "node services/operator/src/cli.ts",
     "operator": "node services/operator/src/cli.ts",
     "e2e:live": "node scripts/e2e-live.mjs"

@@ -1,8 +1,8 @@
 import './safe-errors.mjs';
 // End-to-end on the LIVE networks (Arkiv Rabdi + the Sepolia escrow). No votes: a trusted source decides.
 //
-//   A  a verified human's report is corroborated by a trusted source: confirmed, refunded, a private bounty paid and found with
-//      the reporter's own keys, reputation published
+//   A  a verified human's report is corroborated by a trusted source: confirmed, and the deposit AND a bounty are credited to the
+//      reporter, who claims them from the escrow; reputation published
 //   B  a report nobody corroborates: refunded when the window closes, no bounty, nothing forfeited
 //   C  copying a target a trusted source ALREADY flagged: refunded at once, no bounty
 //
@@ -19,20 +19,19 @@ import { createPublicClient, createWalletClient, formatEther, http, parseEther }
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
 import { eq } from '@arkiv-network/sdk/query';
+import { addr } from '@arkiv-network/sdk/schema';
 import { CONFIG, encodeReportPayload } from '@lookout/core';
 import { SCHEMAS, createArkivClients, createReport, createVerdict, newReportId, redactSecrets } from '@lookout/arkiv';
 import { createEscrow } from '@lookout/escrow';
-import { bountyIdFor, generateKeys, metaAddress, parseMetaAddress, payerEncryptionPublicKey, sealMetaAddress, stealthAddressFor } from '@lookout/stealth';
 import { HUMAN_ACTION, SqliteSeatStore } from '@lookout/worldid';
 
 if (!process.argv.includes('--i-know-this-fakes-world-id')) { console.error('Refusing: this marks the throwaway reporter as a verified human WITHOUT World ID. Add --i-know-this-fakes-world-id to confirm this is a demo.'); process.exit(1); }
 const envPath = new URL('../.env', import.meta.url);
 if (existsSync(envPath)) process.loadEnvFile(envPath);
-const { ARKIV_ACCESS_KEY, ARKIV_PRIVATE_KEY, ESCROW_ADDRESS, ESCROW_RPC_URL, PANEL_PAYER_SECRET, PANEL_ENC_SECRET } = process.env;
-for (const [k, v] of Object.entries({ ARKIV_ACCESS_KEY, ARKIV_PRIVATE_KEY, ESCROW_ADDRESS, PANEL_PAYER_SECRET, PANEL_ENC_SECRET })) {
+const { ARKIV_ACCESS_KEY, ARKIV_PRIVATE_KEY, ESCROW_ADDRESS, ESCROW_RPC_URL } = process.env;
+for (const [k, v] of Object.entries({ ARKIV_ACCESS_KEY, ARKIV_PRIVATE_KEY, ESCROW_ADDRESS })) {
   if (!v) { console.error(`Missing ${k} in .env`); process.exit(1); }
 }
-const hex = (h) => Uint8Array.from(Buffer.from(h, 'hex'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const val = (v) => (v && typeof v === 'object' && 'value' in v ? v.value : v);
 let failed = false;
@@ -72,9 +71,6 @@ seats.enroll('demo_fake_nullifier_e2e_reporter', reporter, HUMAN_ACTION);
 seats.close();
 ok('reporter funded and listed as a verified human', reporter.slice(0, 10) + '…');
 
-const keys = generateKeys();
-const meta = metaAddress(keys);
-const encPub = payerEncryptionPublicKey(hex(PANEL_ENC_SECRET));
 const rand = () => newReportId().slice(0, 8);
 
 // the operator and this script both write from the deployer wallet, and two simultaneous transactions can collide: retry
@@ -91,8 +87,7 @@ async function withRetry(label, fn, tries = 6) {
 async function file(domain) {
   const reportId = newReportId();
   await reporterEscrow.lockDeposit(reportId);
-  const sealed = sealMetaAddress(meta, encPub, reportId);
-  const out = await createReport(rep.writer, { kind: 'domain', value: domain, category: 'drainer', reportId, payload: encodeReportPayload({ kind: 'domain', value: domain, sealed }) });
+  const out = await createReport(rep.writer, { kind: 'domain', value: domain, category: 'drainer', reportId, payload: encodeReportPayload({ kind: 'domain', value: domain }) });
   return { reportId, entityKey: out.entityKey };
 }
 
@@ -116,7 +111,7 @@ try {
   console.log('A. a verified human reports a target, and a trusted source corroborates it');
   const domain = `lookout-e2e-${rand()}.example`;
   const a = await file(domain);
-  ok('deposit locked and report posted, with the plain target and a sealed bounty address', a.reportId.slice(0, 8) + '…');
+  ok('deposit locked and report posted, with the plain target', a.reportId.slice(0, 8) + '…');
   const waiting = await waitFor('the operator to see the report', () => statusOf(a.reportId));
   check(waiting.state === 'waiting', 'the operator is waiting for corroboration', `decide by ${new Date(waiting.decideBy * 1000).toISOString().slice(11, 19)}`);
   check((await operatorEscrow.deposit(reporter, a.reportId)).status === 'locked', 'the deposit is still locked while it waits');
@@ -128,27 +123,21 @@ try {
   check(confirmed.bounty === 'paid', 'the verified human is paid a bounty');
 
   check((await operatorEscrow.deposit(reporter, a.reportId)).status === 'returned', 'the deposit is returned in the escrow contract');
-  check((await operatorEscrow.claimable(reporter)) >= parseEther(String(CONFIG.DEPOSIT_ETH)), 'the refund is claimable by the reporter');
-  check(await operatorEscrow.bountyPaid(bountyIdFor(hex(PANEL_PAYER_SECRET), a.reportId)), 'the bounty is recorded under an opaque id');
-
-  let row;
-  for (let i = 0; i < 10 && !row; i++) { row = (await deployer.publicClient.select({ payload: true }).from(SCHEMAS.bounty).where(eq('reportId', a.reportId)).fetch()).entities[0]; if (!row) await sleep(2000); }
-  check(!!row, 'a bounty announcement is on Arkiv');
-  const raw = val(row.payload);
-  const R = typeof raw === 'string' ? `0x${raw.replace(/^0x/, '')}` : `0x${Buffer.from(raw).toString('hex')}`;
-  const stealth = stealthAddressFor(keys.viewingKey, parseMetaAddress(meta).spendingPub, R);
-  const held = await sep.getBalance({ address: stealth });
-  check(held === parseEther(String(CONFIG.BOUNTY_ETH)), 'the reporter finds the one-time address with their own keys, and it holds the bounty', `${stealth.slice(0, 10)}… ${formatEther(held)} ETH`);
-  check(stealth.toLowerCase() !== reporter, 'the bounty did not go to the reporter wallet');
-  const logs = await sep.getLogs({ address: ESCROW_ADDRESS, fromBlock: BigInt(process.env.ESCROW_DEPLOY_BLOCK ?? 0) });
-  const linked = logs.some((l) => l.topics.some((t) => t.toLowerCase().endsWith(stealth.slice(2).toLowerCase())) && l.topics.some((t) => t.toLowerCase().endsWith(reporter.slice(2))));
-  check(!linked, 'no escrow log ties the one-time address to the reporter');
+  const owed = await operatorEscrow.claimable(reporter);
+  const deposit = parseEther(String(CONFIG.DEPOSIT_ETH));
+  const bounty = parseEther(String(CONFIG.BOUNTY_ETH));
+  check(owed >= deposit + bounty, 'the deposit AND the bounty are waiting for the reporter in the escrow', formatEther(owed) + ' ETH');
+  const before = await sep.getBalance({ address: reporterAccount.address });
+  await reporterEscrow.claim();
+  const after = await sep.getBalance({ address: reporterAccount.address });
+  check(after - before > deposit + bounty - parseEther('0.0005'), 'the reporter claims both with one transaction, to the wallet that filed the report', `+${formatEther(after - before)} ETH after gas`);
 
   console.log('B. a report nobody corroborates is refunded when the window closes, never forfeited');
   const b = await file(`lookout-e2e-${rand()}.example`);
   const refunded = await waitFor('the refund', async () => { const s = await statusOf(b.reportId); return s?.state === 'refunded' ? s : null; }, 200_000);
   check(refunded.reason === 'not-corroborated', 'refunded because nothing corroborated it', refunded.reason);
   check(refunded.bounty === 'none', 'no bounty');
+  check((await operatorEscrow.claimable(reporter)) >= parseEther(String(CONFIG.DEPOSIT_ETH)), 'the deposit is claimable');
   check((await operatorEscrow.deposit(reporter, b.reportId)).status === 'refunded', 'the deposit is refunded, not forfeited, in the contract');
 
   console.log('C. copying a target a trusted source already flagged earns nothing');
@@ -165,7 +154,7 @@ try {
   check(val(stake?.status) === 'returned', 'the Arkiv stake entity mirrors the escrow outcome', String(val(stake?.status)));
   let repRow;
   for (let i = 0; i < 40 && !repRow; i++) {
-    repRow = (await deployer.publicClient.select({ score: true, snapshotId: true }).from(SCHEMAS.reputation).where(eq('wallet', reporter)).fetch()).entities[0];
+    repRow = (await deployer.publicClient.select({ score: true, snapshotId: true }).from(SCHEMAS.reputation).where(eq('wallet', addr(reporter))).fetch()).entities[0];
     if (!repRow) await sleep(5000);
   }
   check(!!repRow && Number(val(repRow.score)) >= CONFIG.HUMAN_BASE_REP, 'a reputation checkpoint carries the verified human at or above the floor', `score ${val(repRow?.score)}`);

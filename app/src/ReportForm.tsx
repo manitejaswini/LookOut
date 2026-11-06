@@ -4,8 +4,7 @@ import { useState } from 'react';
 import type { TargetKind } from '@lookout/core';
 import { CATEGORIES, FlowError, runReportFlow, TARGET_KINDS, type Category, type ReportResult, type ReportStep, type Resume } from './flows/report-flow';
 import { escrowConfigured } from './wallet/chains';
-import { DEPOSIT_ETH_LABEL, PAYER_ENC_KEY, reportPorts } from './wallet/ports';
-import { exportKeys } from './wallet/stealth-keys';
+import { DEPOSIT_ETH_LABEL, reportPorts } from './wallet/ports';
 import { short, useWallet } from './wallet/WalletProvider';
 
 /**
@@ -25,8 +24,6 @@ export default function ReportForm({ initialKind, initialValue }: { initialKind?
   const [kind, setKind] = useState<TargetKind>(initialKind ?? 'domain');
   const [value, setValue] = useState(initialValue ?? '');
   const [category, setCategory] = useState<Category>('drainer');
-  const [bounty, setBounty] = useState(true);
-  const [backup, setBackup] = useState<string | null>(null);
   const [step, setStep] = useState<ReportStep | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<FlowError | null>(null);
@@ -38,9 +35,8 @@ export default function ReportForm({ initialKind, initialValue }: { initialKind?
     setError(null);
     setDone(null);
     try {
-      const r = await runReportFlow(reportPorts(wallet), { kind, value, category, bounty: bounty && !!PAYER_ENC_KEY }, setStep, resume ?? undefined);
+      const r = await runReportFlow(reportPorts(wallet), { kind, value, category }, setStep, resume ?? undefined);
       setDone(r);
-      setBackup(bounty && PAYER_ENC_KEY ? exportKeys() : null);
       setResume(null);
     } catch (e) {
       const fe = e instanceof FlowError ? e : new FlowError('post', e instanceof Error ? e.message : String(e));
@@ -76,12 +72,6 @@ export default function ReportForm({ initialKind, initialValue }: { initialKind?
           <input id="report-value" value={value} onChange={(e) => setValue(e.target.value)} placeholder={kind === 'domain' ? 'claim-airdrop.xyz' : '0x…'} spellCheck={false} autoComplete="off" />
           <button className="btn" type="submit" disabled={busy || !value.trim() || !!blocked}>{busy ? 'Working…' : resume ? 'Retry posting' : `Deposit ${DEPOSIT_ETH_LABEL} ETH and report`}</button>
         </div>
-        {PAYER_ENC_KEY && (
-          <label className="ack">
-            <input type="checkbox" checked={bounty} onChange={(e) => setBounty(e.target.checked)} />
-            {' '}Pay me a private bounty if a trusted source corroborates this (verified humans only). A bounty key is created in this browser. Back it up after, or the bounty is lost.
-          </label>
-        )}
       </form>
 
       {blocked && <p className="tiny">{blocked}</p>}
@@ -110,12 +100,6 @@ export default function ReportForm({ initialKind, initialValue }: { initialKind?
           <p className="verdict-line">Your report is on Arkiv and the deposit is locked.</p>
           <p className="tiny">Report id <code>{done.reportId}</code></p>
           <p className="tiny">Deposit transaction <code>{short(done.depositTx)}</code> · entity <code>{short(done.entityKey)}</code></p>
-          {backup && (
-            <>
-              <p className="tiny"><b>Back up your bounty key now.</b> It stays only in this browser. Anyone who has it can take the bounty. Store it like a password:</p>
-              <pre className="srvlog"><code>{backup}</code></pre>
-            </>
-          )}
         </div>
       )}
     </div>

@@ -19,8 +19,6 @@ export interface ReportInput {
   kind: TargetKind;
   value: string;
   category: Category;
-  /** attach a sealed bounty address, so a confirmed report can be paid privately */
-  bounty?: boolean;
 }
 
 export interface ReportPorts {

@@ -16,7 +16,6 @@
     "@lookout/client": "*",
     "@lookout/core": "*",
     "@lookout/escrow": "*",
-    "@lookout/stealth": "*",
     "@lookout/worldid": "*",
     "@worldcoin/idkit": "^4.6.0",
     "@worldcoin/idkit-core": "^4.6.0",
