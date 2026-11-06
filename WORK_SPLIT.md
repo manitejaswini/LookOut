@@ -123,6 +123,8 @@ Goal: a real block verdict read from real Arkiv entities, shown on the wallet pa
 
 **Gate 6:** either both items run, or each has a documented, evidence-backed reason it cannot yet.
 
+**Status (2026-11-06):** both items were researched, nothing is tested yet. Findings, the two spikes that decide each item, and the one-EF-prize-per-project consequence are in `arkiv/ef-verification.md`.
+
 ### Phase 7: Submission (both)
 
 | Dev A | Dev B |
