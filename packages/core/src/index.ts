@@ -5,3 +5,4 @@ export * from './target.ts';
 export * from './attack.ts';
 export * from './snapshot.ts';
 export * from './vote.ts';
+export * from './reputation.ts';
