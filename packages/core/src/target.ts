@@ -8,6 +8,7 @@ import type { TargetKind } from './types.ts';
  *  - address / contract: 0x + 40 hex digits, lowercased. EIP-55 checksum case is ignored.
  *  - domain: lowercase punycode host. Scheme, userinfo, port, path, query, fragment and a trailing
  *    dot are dropped. A leading "www." is kept: it is a different host and scams use subdomains.
+ *    IP addresses and bare numbers such as "0x123" are rejected, not treated as hosts.
  */
 export function normalizeTarget(kind: TargetKind, value: string): string {
   const raw = value.trim();
@@ -24,6 +25,9 @@ export function normalizeTarget(kind: TargetKind, value: string): string {
   }
   host = host.replace(/\.$/, '');
   if (!host || !host.includes('.')) throw new Error(`invalid domain: ${value}`);
+  // The URL parser reads "0x123" or "12345" as a number and rewrites it to an IPv4 host
+  // ("0.0.1.35"). A real TLD is never all digits, so a numeric last label is an IP, not a domain.
+  if (/\.\d+$/.test(host)) throw new Error(`invalid domain: ${value}`);
   return host;
 }
 

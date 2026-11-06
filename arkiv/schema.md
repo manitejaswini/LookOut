@@ -45,7 +45,7 @@ targetHash = keccak256( namespace + ":" + normalizedTarget )     // 0x + 64 lowe
 
 | Target kind | `namespace` | `normalizedTarget` |
 | --- | --- | --- |
-| `domain` | `domain` | Lowercase punycode host. Scheme, userinfo, port, path, query, fragment and a trailing dot are dropped. A leading `www.` is **kept** because it is a different host and scams use subdomains. Must contain a dot |
+| `domain` | `domain` | Lowercase punycode host. Scheme, userinfo, port, path, query, fragment and a trailing dot are dropped. A leading `www.` is **kept** because it is a different host and scams use subdomains. Must contain a dot. IP addresses and bare numbers such as `0x123` are rejected, never hashed (a URL parser would silently rewrite `0x123` to the IPv4 host `0.0.1.35`) |
 | `address`, `contract` | `evm` | `0x` plus 40 hex digits, lowercased. EIP-55 checksum case is ignored |
 
 An address and a contract share the `evm` namespace, so the same address matches whichever `targetKind` a reporter chose. `targetKind` is still stored as its own attribute.

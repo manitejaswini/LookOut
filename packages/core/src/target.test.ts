@@ -23,6 +23,11 @@ test('domains: junk is rejected', () => {
   for (const v of ['', '   ', 'localhost', 'http://']) assert.throws(() => normalizeTarget('domain', v), v);
 });
 
+test('domains: numbers and IPs are not domains (the URL parser would rewrite 0x123 to 0.0.1.35)', () => {
+  for (const v of ['0x123', '12345', '0xdeadbeef', '1.2.3.4', 'http://192.168.0.1/']) assert.throws(() => normalizeTarget('domain', v), v);
+  assert.equal(normalizeTarget('domain', 'a1.b2.com'), 'a1.b2.com');
+});
+
 test('addresses: lowercased, strict shape', () => {
   const a = '0x5Fd9a1E4b7c3920B6a8E1d04C7f23b9a6E5d1c08';
   assert.equal(normalizeTarget('address', a), a.toLowerCase());
