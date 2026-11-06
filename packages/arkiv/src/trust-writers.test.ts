@@ -2,10 +2,10 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { commitVote, targetHash } from '@lookout/core';
+import { targetHash } from '@lookout/core';
 import { SCHEMAS } from './schemas.ts';
 import {
-  createBounty, createReputation, createRuling, createStake, createVote, publishReputationCheckpoint, revealVote, setStakeStatus,
+  createBounty, createReputation, createRuling, createStake, publishReputationCheckpoint, setStakeStatus,
   type TrustWriter,
 } from './trust-writers.ts';
 
@@ -74,41 +74,6 @@ test('setStakeStatus patches a locked stake to returned or slashed, and nothing 
   await assert.rejects(setStakeStatus(client, { entityKey: KEY, from: 'locked', to: 'locked' as never }), /status/);
   await assert.rejects(setStakeStatus(client, { entityKey: '0x12', from: 'locked', to: 'returned' }), /entityKey/);
   assert.equal(calls.length, 2, 'the refused ones never reached the client');
-});
-
-/* ---------- vote ---------- */
-
-test('createVote publishes ONLY the commitment: no outcome and no salt', async () => {
-  const { client, calls } = fake();
-  const commitHash = commitVote({ caseId: CASE_ID, outcome: 'block', salt: SALT, juror: JUROR });
-  await createVote(client, { caseId: CASE_ID, commitHash });
-  const { schema, values, options } = created(calls);
-  assert.equal(schema, SCHEMAS.vote);
-  assert.deepEqual(values, { caseId: CASE_ID, commitHash });
-  assert.equal(options.flags.readonly, undefined, 'a vote is patched at reveal');
-  assert.equal(blocks(options.expiration), 302_400n);
-  await assert.rejects(createVote(client, { caseId: 'zz', commitHash }), /caseId/);
-  await assert.rejects(createVote(client, { caseId: CASE_ID, commitHash: '0xABC' }), /commitHash/);
-});
-
-test('revealVote patches outcome and salt only when they match the commitment', async () => {
-  const { client, calls } = fake();
-  const commitHash = commitVote({ caseId: CASE_ID, outcome: 'clear', salt: SALT, juror: JUROR });
-  await revealVote(client, { entityKey: KEY, caseId: CASE_ID, juror: JUROR, outcome: 'clear', salt: SALT, commitHash });
-  assert.deepEqual((calls[0].args[2] as { set: unknown }).set, { outcome: 'clear', salt: SALT });
-  assert.equal(calls[0].args[0], SCHEMAS.vote);
-});
-
-test('a reveal that changes the vote, the salt, the juror or the case is refused locally and never published', async () => {
-  const { client, calls } = fake();
-  const commitHash = commitVote({ caseId: CASE_ID, outcome: 'clear', salt: SALT, juror: JUROR });
-  const base = { entityKey: KEY, caseId: CASE_ID, juror: JUROR, outcome: 'clear' as const, salt: SALT, commitHash };
-  await assert.rejects(revealVote(client, { ...base, outcome: 'block' }), /does not match the commitment/);
-  await assert.rejects(revealVote(client, { ...base, salt: 'cd'.repeat(16) }), /does not match/);
-  await assert.rejects(revealVote(client, { ...base, juror: '0x5fd9a1e4b7c3920b6a8e1d04c7f23b9a6e5d1c08' }), /does not match/);
-  await assert.rejects(revealVote(client, { ...base, caseId: 'fedcba9876543210' }), /does not match/);
-  await assert.rejects(revealVote(client, { ...base, outcome: 'maybe' as never }), /outcome/);
-  assert.equal(calls.length, 0);
 });
 
 /* ---------- ruling ---------- */

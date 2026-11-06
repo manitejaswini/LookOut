@@ -1,5 +1,5 @@
 import { addr, dec, u256 } from '@arkiv-network/sdk/schema';
-import { verifyReveal, VOTE_OUTCOMES, type VoteOutcome } from '@lookout/core';
+import type { OutcomeKind } from './kinds.ts';
 import type { TargetKind } from '@lookout/core';
 import { CREATION_FLAGS, LIFETIMES } from './lifetimes.ts';
 import { ENUMS } from './kinds.ts';
@@ -8,15 +8,14 @@ import { defined, HEX32, oneOf, result, type EntityWriter, type WriteResult } fr
 import { normalizeTarget, targetHash } from '@lookout/core';
 
 /**
- * Writers for the trust layer: stake, vote, ruling, reputation and bounty.
+ * Writers for the trust layer: stake, ruling, reputation and bounty.
  * Same rules as writers.ts: every input is checked BEFORE anything is sent, and none of these hold a key.
  *
  * Who may write each kind is NOT enforced here. Anyone can write to Arkiv. Indexers enforce it by checking `$creator`
- * (arkiv/schema.md, "Trusted writers"): `stake` only from the escrow writer, `ruling` only from the panel wallet, `vote`
- * only from a juror drawn for the case, `reputation` only from a registered indexer, `bounty` only from the payer wallet.
+ * (arkiv/schema.md, "Trusted writers"): `stake` only from the escrow writer, `ruling` only from the operator wallet, `reputation` only from a registered indexer, `bounty` only from the payer wallet.
  */
 
-/** `stake` status and `vote` reveals are patches, so these writers also need `patchEntity`. */
+/** A `stake` status change is a patch, so these writers also need `patchEntity`. */
 export interface TrustWriter extends EntityWriter {
   patchEntity(schema: unknown, entityKey: string, args: { set: Record<string, unknown> }): Promise<unknown>;
 }
@@ -61,51 +60,14 @@ export async function setStakeStatus(client: TrustWriter, input: { entityKey: st
   await client.patchEntity(SCHEMAS.stake, input.entityKey, { set: { status: input.to } });
 }
 
-/* ---------- vote: hidden, then revealed ---------- */
-
-/** The commit round. Only the commitment is published, so nobody can read or copy the vote. */
-export async function createVote(client: EntityWriter, input: { caseId: string; commitHash: string }): Promise<WriteResult> {
-  need(CASE_ID.test(input.caseId), 'caseId must be 16 lowercase hex digits');
-  need(HEX32.test(input.commitHash), 'commitHash must be 0x followed by 64 lowercase hex digits');
-  const out = await client.createEntity(
-    SCHEMAS.vote,
-    { caseId: input.caseId, commitHash: input.commitHash },
-    { expiration: LIFETIMES.vote(), flags: CREATION_FLAGS.vote },
-  );
-  return result(out);
-}
-
-export interface RevealInput {
-  entityKey: string;
-  caseId: string;
-  /** the juror's wallet, bound into the commitment */
-  juror: string;
-  outcome: VoteOutcome;
-  salt: string;
-  /** the commitment already published for this vote */
-  commitHash: string;
-}
-
-/**
- * The reveal round. The reveal is checked against the commitment HERE first, so a wrong or tampered reveal is never
- * published. The panel service checks it again before it counts the vote, because anyone can write to Arkiv.
- */
-export async function revealVote(client: TrustWriter, input: RevealInput): Promise<void> {
-  need(ENTITY_KEY.test(input.entityKey), 'entityKey must be 0x + 64 hex');
-  oneOf('outcome', input.outcome, VOTE_OUTCOMES);
-  need(verifyReveal(input.commitHash, { caseId: input.caseId, outcome: input.outcome, salt: input.salt, juror: input.juror }),
-    'this reveal does not match the commitment, it would be ignored');
-  await client.patchEntity(SCHEMAS.vote, input.entityKey, { set: { outcome: input.outcome, salt: input.salt } });
-}
-
 /* ---------- ruling: the outcome of a case ---------- */
 
 export interface RulingInput {
   caseId: string;
   kind: TargetKind;
   value: string;
-  outcome: VoteOutcome;
-  /** the juror list, the tally and the seed used to draw them, so anyone can re-check the ruling */
+  outcome: OutcomeKind;
+  /** the operator's reasons, so anyone can see why */
   payload?: Uint8Array;
 }
 

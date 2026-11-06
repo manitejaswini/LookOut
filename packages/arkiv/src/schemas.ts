@@ -41,18 +41,11 @@ const stake = defineSchema(schemaName('stake'), {
   escrowTx: str(),
 });
 
-const vote = defineSchema(schemaName('vote'), {
-  caseId: str().indexed(),
-  commitHash: str(), // set at creation
-  outcome: str().optional(), // set at reveal with patchEntity
-  salt: str().optional(), // set at reveal
-});
-
 const ruling = defineSchema(schemaName('ruling'), {
   caseId: str().indexed(),
   targetHash: str().indexed(),
   outcome: str().indexed(),
-  payload: bytes().optional(), // juror list and the vote tally
+  payload: bytes().optional(), // the operator's reasons, as JSON
 });
 
 const reputation = defineSchema(schemaName('reputation'), {
@@ -74,6 +67,6 @@ const bounty = defineSchema(schemaName('bounty'), {
   payload: bytes(), // ephemeral public key, format in arkiv/stealth-format.md
 });
 
-export const SCHEMAS = { report, verdict, attestation, stake, vote, ruling, reputation, snapshot, bounty } as const;
+export const SCHEMAS = { report, verdict, attestation, stake, ruling, reputation, snapshot, bounty } as const;
 
 export const schemaOf = <K extends Kind>(kind: K): (typeof SCHEMAS)[K] => SCHEMAS[kind];

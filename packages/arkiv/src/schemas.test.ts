@@ -17,7 +17,6 @@ const INDEXED: Record<Kind, string[]> = {
   verdict: ['targetHash', 'sourceType', 'sourceId', 'level'],
   attestation: ['targetHash', 'claim'],
   stake: ['reportId', 'status'],
-  vote: ['caseId'],
   ruling: ['caseId', 'targetHash', 'outcome'],
   reputation: ['wallet', 'snapshotId'],
   snapshot: ['snapshotId', 'indexerId'],
@@ -29,15 +28,14 @@ const OPTIONAL: Record<Kind, string[]> = {
   verdict: ['proofHash', 'reason', 'payload'],
   attestation: ['payload'],
   stake: [],
-  vote: ['outcome', 'salt'],
   ruling: ['payload'],
   reputation: [],
   snapshot: [],
   bounty: [], // payload is required: a bounty without an ephemeral key is useless
 };
 
-test('there are exactly nine kinds, and each is a named schema lookout.v0.<kind>', () => {
-  assert.equal(KINDS.length, 9);
+test('there are exactly eight kinds, and each is a named schema lookout.v0.<kind>', () => {
+  assert.equal(KINDS.length, 8);
   for (const k of KINDS) {
     const s = SCHEMAS[k];
     assert.ok(isSchema(s), k);
@@ -92,9 +90,9 @@ test('hash and id columns are str, wallets are addr, so queries match what the d
   assert.equal(cols('snapshot').bucketCount.type, 'i32');
 });
 
-test('creation flags: readonly everywhere except stake (status changes) and vote (reveal); extension is never permissionless', () => {
+test('creation flags: readonly everywhere except stake (status changes); extension is never permissionless', () => {
   for (const k of KINDS) {
-    const want = k !== 'stake' && k !== 'vote';
+    const want = k !== 'stake';
     assert.equal(!!CREATION_FLAGS[k].readonly, want, k);
     assert.equal('permissionlessExtension' in CREATION_FLAGS[k], false, `${k} must not allow anyone to extend`);
   }
@@ -107,7 +105,6 @@ test('lifetimes, in blocks, match the doc and stay under the 182.5 day maximum',
     attestation: 1_296_000n, // 30 days
     ruling: 3_888_000n,     // 90 days
     stake: 1_296_000n,      // 30 days (tune)
-    vote: 302_400n,         // 7 days (tune)
     bounty: 2_592_000n,     // 60 days (tune)
     snapshot: 604_800n,     // 14 days (tune)
     reputation: 604_800n,   // 14 days (tune)

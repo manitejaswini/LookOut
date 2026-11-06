@@ -55,13 +55,11 @@ export interface EscrowConfig {
   resolver: Address;
   depositWei: bigint;
   bountyWei: bigint;
-  minReviewerStake: bigint;
-  unstakeDelay: bigint;
   resolveWindow: bigint;
 }
 
-export type DepositStatus = 'none' | 'locked' | 'returned' | 'slashed' | 'reclaimed';
-const STATUS: DepositStatus[] = ['none', 'locked', 'returned', 'slashed', 'reclaimed'];
+export type DepositStatus = 'none' | 'locked' | 'returned' | 'slashed' | 'reclaimed' | 'refunded';
+const STATUS: DepositStatus[] = ['none', 'locked', 'returned', 'slashed', 'reclaimed', 'refunded'];
 
 export interface TxResult {
   hash: Hex;
@@ -79,7 +77,7 @@ export interface DepositedEvent {
   blockNumber: bigint;
 }
 
-export type SettlementKind = 'confirmed' | 'rejected' | 'reclaimed';
+export type SettlementKind = 'confirmed' | 'rejected' | 'reclaimed' | 'refunded';
 
 export interface SettledEvent {
   kind: SettlementKind;
@@ -120,11 +118,10 @@ export function createEscrow(deps: EscrowDeps) {
     (await publicClient.readContract({ address, abi: escrowAbi, functionName, args })) as T;
 
   async function config(): Promise<EscrowConfig> {
-    const [resolver, depositWei, bountyWei, minReviewerStake, unstakeDelay, resolveWindow] = await Promise.all([
-      read<Address>('resolver'), read<bigint>('depositWei'), read<bigint>('bountyWei'),
-      read<bigint>('minReviewerStake'), read<bigint>('unstakeDelay'), read<bigint>('resolveWindow'),
+    const [resolver, depositWei, bountyWei, resolveWindow] = await Promise.all([
+      read<Address>('resolver'), read<bigint>('depositWei'), read<bigint>('bountyWei'), read<bigint>('resolveWindow'),
     ]);
-    return { resolver, depositWei, bountyWei, minReviewerStake, unstakeDelay: BigInt(unstakeDelay), resolveWindow: BigInt(resolveWindow) };
+    return { resolver, depositWei, bountyWei, resolveWindow: BigInt(resolveWindow) };
   }
 
   const checkedBytes32 = (h: string): Hex => {
@@ -153,14 +150,9 @@ export function createEscrow(deps: EscrowDeps) {
     claimable: (who: string) => read<bigint>('claimable', [checked(who)]),
     bountyPool: () => read<bigint>('bountyPool'),
     totals: async () => ({
-      locked: await read<bigint>('totalLocked'), staked: await read<bigint>('totalStaked'),
+      locked: await read<bigint>('totalLocked'),
       claimable: await read<bigint>('totalClaimable'), pool: await read<bigint>('bountyPool'),
     }),
-    async stakeOf(who: string): Promise<{ amount: bigint; unlockAt: bigint; eligible: boolean }> {
-      const w = checked(who);
-      const [amount, unlockAt] = await read<readonly [bigint, bigint]>('stakes', [w]);
-      return { amount: BigInt(amount), unlockAt: BigInt(unlockAt), eligible: await read<boolean>('isEligibleReviewer', [w]) };
-    },
     balance: () => publicClient.getBalance({ address }),
 
     /* ----- reporter ----- */
@@ -176,12 +168,8 @@ export function createEscrow(deps: EscrowDeps) {
     reject: (reporter: string, reportId: string) => send('reject', [checked(reporter), toBytes16(reportId)]),
     /** Takes no reporter and no report id on purpose: nothing public links a bounty to a report. */
     payBounty: (bountyId: string, stealth: string) => send('payBounty', [checkedBytes32(bountyId), checked(stealth)]),
-    slash: (reviewer: string, amountWei: bigint) => send('slash', [checked(reviewer), amountWei]),
-
-    /* ----- reviewers ----- */
-    stake: (valueWei: bigint) => send('stake', [], valueWei),
-    requestUnstake: () => send('requestUnstake', []),
-    withdraw: () => send('withdraw', []),
+    /** The report added nothing new or was not corroborated in time: the deposit goes back, with NO bounty. */
+    refund: (reporter: string, reportId: string) => send('refund', [checked(reporter), toBytes16(reportId)]),
 
     /** Anyone may add to the bounty pool. A plain transfer lands there too. */
     async fundPool(valueWei: bigint): Promise<TxResult> {
@@ -206,7 +194,7 @@ export function createEscrow(deps: EscrowDeps) {
     async settledEvents(fromBlock: bigint, toBlock?: bigint): Promise<SettledEvent[]> {
       const logs = await publicClient.getLogs({ address, fromBlock, toBlock });
       const out: SettledEvent[] = [];
-      for (const [name, kind] of [['Confirmed', 'confirmed'], ['Rejected', 'rejected'], ['Reclaimed', 'reclaimed']] as const) {
+      for (const [name, kind] of [['Confirmed', 'confirmed'], ['Rejected', 'rejected'], ['Reclaimed', 'reclaimed'], ['Refunded', 'refunded']] as const) {
         for (const l of parseEventLogs({ abi: escrowAbi, logs, eventName: name })) {
           out.push({ kind, reporter: l.args.reporter, reportId: fromBytes16(l.args.reportId), txHash: l.transactionHash, blockNumber: l.blockNumber });
         }
@@ -226,8 +214,6 @@ export interface DeployArgs {
   resolver: string;
   depositWei: bigint;
   bountyWei: bigint;
-  minReviewerStake: bigint;
-  unstakeDelay: bigint;
   resolveWindow: bigint;
 }
 
@@ -237,7 +223,7 @@ export async function deployEscrow(a: DeployArgs): Promise<{ address: Address; h
   try {
     const hash = await a.walletClient.deployContract({
       abi: escrowAbi, bytecode: escrowBytecode, account: a.walletClient.account, chain: a.walletClient.chain,
-      args: [getAddress(a.resolver), a.depositWei, a.bountyWei, a.minReviewerStake, a.unstakeDelay, a.resolveWindow],
+      args: [getAddress(a.resolver), a.depositWei, a.bountyWei, a.resolveWindow],
     });
     const receipt = await a.publicClient.waitForTransactionReceipt({ hash });
     if (!receipt.contractAddress || receipt.status !== 'success') throw new EscrowError('Unknown', 'the deployment failed');

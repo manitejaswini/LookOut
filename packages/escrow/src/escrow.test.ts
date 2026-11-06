@@ -15,8 +15,6 @@ const skip = HAVE_ANVIL ? false : 'anvil (Foundry) is not installed';
 
 const DEPOSIT = parseEther('0.01');
 const BOUNTY = parseEther('0.005');
-const MIN_STAKE = parseEther('1');
-const UNSTAKE_DELAY = 7n * 86_400n;
 const WINDOW = 30n * 86_400n;
 
 let chain: LocalChain;
@@ -38,7 +36,7 @@ before(async () => {
   [resolver, alice, bob, , stealth] = [chain.accounts[0], chain.accounts[1], chain.accounts[2], chain.accounts[3], chain.accounts[4]];
   ({ address } = await deployEscrow({
     publicClient: chain.publicClient, walletClient: resolver.wallet, resolver: resolver.address,
-    depositWei: DEPOSIT, bountyWei: BOUNTY, minReviewerStake: MIN_STAKE, unstakeDelay: UNSTAKE_DELAY, resolveWindow: WINDOW,
+    depositWei: DEPOSIT, bountyWei: BOUNTY, resolveWindow: WINDOW,
   }));
 });
 after(async () => { if (HAVE_ANVIL) await chain.stop(); });
@@ -52,8 +50,6 @@ test('the deployed contract has the configuration it was deployed with', { skip 
   assert.equal(c.resolver, resolver.address);
   assert.equal(c.depositWei, DEPOSIT);
   assert.equal(c.bountyWei, BOUNTY);
-  assert.equal(c.minReviewerStake, MIN_STAKE);
-  assert.equal(c.unstakeDelay, UNSTAKE_DELAY);
   assert.equal(c.resolveWindow, WINDOW);
 });
 
@@ -114,7 +110,7 @@ test('LIFECYCLE: deposit, see the event, confirm, claim the refund, and be paid 
 test('ACCOUNTING: the escrow always holds exactly what it owes, checked against the chain itself', { skip }, async () => {
   const e = as(alice);
   const t = await e.totals();
-  assert.equal(await e.balance(), t.locked + t.staked + t.claimable + t.pool);
+  assert.equal(await e.balance(), t.locked + t.claimable + t.pool);
 });
 
 test('the contract\'s own error names come through, and nothing is sent when the call would revert', { skip }, async () => {
@@ -130,7 +126,7 @@ test('the contract\'s own error names come through, and nothing is sent when the
   await assert.rejects(r.confirm(alice.address, id(99)), refusal('NotLocked'));
   await assert.rejects(r.payBounty(bid(10), stealth.address), refusal('NotConfirmed'));
   await assert.rejects(r.payBounty(bid(10), '0x0000000000000000000000000000000000000000'), refusal('ZeroAddress'), 'the destination is checked first');
-  await assert.rejects(a.slash(bob.address, 1n), refusal('NotResolver'));
+  await assert.rejects(a.refund(alice.address, id(10)), refusal('NotResolver'));
 
   // every refused call above was caught by the simulation, so no gas was spent on any of them
   const blocks = (await chain.publicClient.getBlockNumber()) - blockBefore2;
@@ -149,28 +145,21 @@ test('RECLAIM: a reporter can take the deposit back only after the window, and t
   await a.claim();
 });
 
-test('REVIEWER STAKES: minimum, eligibility, slash into the pool, and the unstake delay', { skip }, async () => {
-  const b = as(bob), r = as(resolver);
-  await assert.rejects(b.stake(MIN_STAKE - 1n), refusal('BelowMinimum'));
-  await b.stake(parseEther('2'));
-  let s = await b.stakeOf(bob.address);
-  assert.equal(s.amount, parseEther('2'));
-  assert.equal(s.eligible, true);
-
-  const poolBefore = await r.bountyPool();
-  await r.slash(bob.address, parseEther('0.5'));
-  assert.equal((await b.stakeOf(bob.address)).amount, parseEther('1.5'));
-  assert.equal(await r.bountyPool(), poolBefore + parseEther('0.5'));
-
-  await b.requestUnstake();
-  s = await b.stakeOf(bob.address);
-  assert.equal(s.eligible, false, 'an unstaking reviewer is not eligible for new cases');
-  await assert.rejects(b.withdraw(), refusal('TooEarly'));
-  await chain.increaseTime(Number(UNSTAKE_DELAY));
-  await b.withdraw();
-  assert.equal((await b.stakeOf(bob.address)).amount, 0n);
-  const t = await b.totals();
-  assert.equal(await b.balance(), t.locked + t.staked + t.claimable + t.pool, 'still exactly solvent');
+test('REFUND: the deposit goes back with no bounty, and it is not a confirmation', { skip }, async () => {
+  const a = as(alice), r = as(resolver);
+  const before = await a.bountyCounts();
+  await a.lockDeposit(id(30));
+  await r.refund(alice.address, id(30));
+  assert.equal((await a.deposit(alice.address, id(30))).status, 'refunded');
+  assert.equal(await a.claimable(alice.address) >= DEPOSIT, true);
+  await assert.rejects(r.payBounty(bid(30), stealth.address), refusal('NotConfirmed'), 'no confirmation, so no bounty');
+  assert.deepEqual(await a.bountyCounts(), before, 'the confirmation count did not move');
+  const settled = await a.settledEvents(0n);
+  assert.ok(settled.some((e) => e.kind === 'refunded' && e.reportId === id(30)), 'the refund is a settlement event the Arkiv mirror can follow');
+  await assert.rejects(r.refund(alice.address, id(30)), refusal('NotLocked'), 'only once');
+  const t = await a.totals();
+  assert.equal(await a.balance(), t.locked + t.claimable + t.pool, 'still exactly solvent');
+  await a.claim();
 });
 
 test('anyone can add to the pool, and a plain transfer lands there too', { skip }, async () => {
