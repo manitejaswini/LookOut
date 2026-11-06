@@ -8,7 +8,7 @@ import type { StoredEntity } from './types.ts';
 
 const IDX = '0x9999999999999999999999999999999999999999';
 const IDX2 = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
-const registry = parseRegistry({ ...JSON.parse(JSON.stringify({ sources: [], attesters: [], panel: null })), indexers: [{ indexerId: 'one', address: IDX }, { indexerId: 'two', address: IDX2 }], reputation: { [ADDR.rep100]: 100 } });
+const registry = parseRegistry({ ...JSON.parse(JSON.stringify({ sources: [], attesters: [], operator: null })), indexers: [{ indexerId: 'one', address: IDX }, { indexerId: 'two', address: IDX2 }], reputation: { [ADDR.rep100]: 100 } });
 let n = 0;
 const rep = (creator: string, wallet: string, snapshotId: string, score: string, created = 99_000): StoredEntity => ({
   key: `0x${(++n).toString(16).padStart(64, '0')}`, kind: 'reputation', creator, owner: creator, createdBlock: created, expiresBlock: 200_000, attrs: { wallet, snapshotId, score },

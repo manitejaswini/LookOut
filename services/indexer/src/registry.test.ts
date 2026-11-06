@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import { findSource, loadRegistry, parseRegistry, reputationOf, sourceIdx } from './registry.ts';
 import { ADDR, registry } from './fixtures.ts';
 
-const good = { sources: [{ sourceId: 'a', sourceType: 'feed', address: ADDR.feed }], attesters: [], panel: null, reputation: {} };
+const good = { sources: [{ sourceId: 'a', sourceType: 'feed', address: ADDR.feed }], attesters: [], operator: null, reputation: {} };
 
 test('a valid registry parses, and addresses are lowercased', () => {
-  const r = parseRegistry({ ...good, attesters: ['0xAAAAaaaaAAAAaaaaAAAAaaaaAAAAaaaaAAAAaaaa'], panel: ADDR.panel.toUpperCase().replace('0X', '0x') });
+  const r = parseRegistry({ ...good, attesters: ['0xAAAAaaaaAAAAaaaaAAAAaaaaAAAAaaaaAAAAaaaa'], operator: ADDR.operator.toUpperCase().replace('0X', '0x') });
   assert.equal(r.attesters[0], '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
-  assert.equal(r.panel, ADDR.panel);
+  assert.equal(r.operator, ADDR.operator);
 });
 
 test('bad registries are rejected loudly', () => {
@@ -45,8 +45,8 @@ test('the committed registry.json parses and lists the demo checker and feed', (
   const r = loadRegistry();
   assert.ok(r.sources.some((s) => s.sourceId === 'lookout-checker' && s.sourceType === 'checker'));
   assert.ok(r.sources.some((s) => s.sourceId === 'openfeed-demo' && s.sourceType === 'feed'));
-  assert.deepEqual(r.attesters, [], 'no attester is honoured until proof of control exists');
-  assert.equal(r.panel, null);
+  assert.deepEqual(r.attesters, [], 'no allowlisted attester: owner disputes are accepted by proof of control instead');
+  assert.match(r.operator ?? '', /^0x[0-9a-f]{40}$/, 'the operator wallet whose rulings count is set');
 });
 
 test('indexers: parsed with lowercase addresses, and optional (an old registry file still loads)', () => {

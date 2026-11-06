@@ -36,7 +36,7 @@ export type DropReason =
   | 'untrusted verdict writer'
   | 'bad verdict fields'
   | 'attester not recognised'
-  | 'ruling not from the panel'
+  | 'ruling not from the operator'
   | 'bad ruling outcome'
   | 'superseded ruling';
 
@@ -94,7 +94,7 @@ export function buildTargets(
       if (!allowlisted && !proved) { drop('attester not recognised'); continue; }
       if (e.attrs.claim === 'legit') view(hash).disputed = true;
     } else if (e.kind === 'ruling') {
-      if (registry.panel === null || e.creator !== registry.panel) { drop('ruling not from the panel'); continue; }
+      if (registry.operator === null || e.creator !== registry.operator) { drop('ruling not from the operator'); continue; }
       const outcome = e.attrs.outcome;
       if (outcome !== 'block' && outcome !== 'clear') { drop('bad ruling outcome'); continue; }
       const t = view(hash);

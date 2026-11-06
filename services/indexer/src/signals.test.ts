@@ -104,33 +104,33 @@ test("an attester's `confirmed` claim does not dispute anything", () => {
 
 /* ---------- rulings ---------- */
 
-test('a panel ruling of block blocks on its own', () => {
-  const { result } = run([ruling(ADDR.panel, 'block')]);
+test('an operator ruling of block blocks on its own', () => {
+  const { result } = run([ruling(ADDR.operator, 'block')]);
   assert.equal(result.verdict, 'block');
 });
 
-test('a panel ruling of clear overrides block signals', () => {
-  const { result } = run([feedVerdict(), checkerVerdict(true), ruling(ADDR.panel, 'clear')]);
+test('an operator ruling of clear overrides block signals', () => {
+  const { result } = run([feedVerdict(), checkerVerdict(true), ruling(ADDR.operator, 'clear')]);
   assert.equal(result.verdict, 'unknown');
   assert.match(result.headline, /cleared/i);
 });
 
-test('a ruling from anyone but the panel wallet is ignored', () => {
+test('a ruling from anyone but the operator wallet is ignored', () => {
   const { result, dropped } = run([ruling(ADDR.stranger, 'block')]);
   assert.equal(result.verdict, 'unknown');
-  assert.deepEqual(dropped.map((d) => d.reason), ['ruling not from the panel']);
+  assert.deepEqual(dropped.map((d) => d.reason), ['ruling not from the operator']);
 });
 
 test('the newest ruling wins, whatever order the entities come in', () => {
-  const older = ruling(ADDR.panel, 'clear', H, { created: 90_000, key: `0x${'a'.repeat(64)}` });
-  const newer = ruling(ADDR.panel, 'block', H, { created: 95_000, key: `0x${'b'.repeat(64)}` });
+  const older = ruling(ADDR.operator, 'clear', H, { created: 90_000, key: `0x${'a'.repeat(64)}` });
+  const newer = ruling(ADDR.operator, 'block', H, { created: 95_000, key: `0x${'b'.repeat(64)}` });
   assert.equal(run([older, newer]).result.verdict, 'block');
   assert.equal(run([newer, older]).result.verdict, 'block');
 });
 
-test('with no panel configured, no ruling counts', () => {
-  const noPanel = { ...registry, panel: null };
-  const { targets } = buildTargets([ruling(ADDR.panel, 'block')], timing, noPanel);
+test('with no operator configured, no ruling counts', () => {
+  const noOperator = { ...registry, operator: null };
+  const { targets } = buildTargets([ruling(ADDR.operator, 'block')], timing, noOperator);
   assert.equal(targets.size, 0);
 });
 
@@ -171,7 +171,7 @@ const flagged = (hash: string) => [verdict(ADDR.feed, { sourceType: 'feed', sour
 test('OWNER PROOF: the owner of a flagged address marks it DISPUTED with no allowlist, and it still does not clear the flag', async () => {
   const { result } = run([...flagged(ownerHash), await proven(ownerAcct.address)], ownerHash);
   assert.equal(result.disputed, true);
-  assert.equal(result.verdict, 'block', 'a dispute alone never clears a flag, only a panel ruling can');
+  assert.equal(result.verdict, 'block', 'a dispute alone never clears a flag, only an operator ruling can');
 });
 
 test('OWNER PROOF: nobody else can dispute for the owner, even replaying the owner signature', async () => {
