@@ -1,16 +1,6 @@
-import type { Metadata } from 'next';
-import Deck from '../../Deck';
-import { ONE_LINE } from '../../pitch-data';
+import { redirect } from 'next/navigation';
 
-export const metadata: Metadata = {
-  title: 'Pitch · Lookout',
-  description: ONE_LINE,
-};
-
+// The pitch is now two decks. Old links go to the Arkiv one.
 export default function Pitch() {
-  return (
-    <main>
-      <Deck />
-    </main>
-  );
+  redirect('/pitch/arkiv');
 }

@@ -9,7 +9,8 @@ const NAV: [string, string][] = [
   ['/#explorer', 'Explorer'],
   ['/#agent', 'Agent'],
   ['/#how', 'How it works'],
-  ['/pitch', 'Pitch'],
+  ['/pitch/arkiv', 'Arkiv pitch'],
+  ['/pitch/ef', 'EF pitch'],
 ];
 
 export default function Header() {
@@ -19,7 +20,7 @@ export default function Header() {
       <Link href="/" className="logo"><span className="logo-px" aria-hidden="true" />LOOKOUT</Link>
       <nav aria-label="Primary">
         {NAV.map(([href, label]) => (
-          <Link key={href} href={href} aria-current={href === path ? 'page' : undefined} className={href === '/pitch' ? 'nav-pitch' : undefined}>
+          <Link key={href} href={href} aria-current={href === path ? 'page' : undefined} className={href.startsWith('/pitch') ? 'nav-pitch' : undefined}>
             {label}
           </Link>
         ))}
