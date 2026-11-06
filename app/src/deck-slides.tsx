@@ -89,6 +89,28 @@ function WorkflowSlide({ intro, steps, notes }: { intro: string; steps: P.Step[]
   );
 }
 
+function CropsSlide({ step, mark, name, statement, points, limit }: { step: number; mark: string; name: string; statement: string; points: string[]; limit: string }) {
+  return (
+    <>
+      <p className="mono-label">{`0${step + 2} · CROPS · ${step} of 4`}</p>
+      <div className="crops">
+        <div className="crops-mark" aria-hidden="true">{mark}</div>
+        <div className="crops-body">
+          <h2 className="s-title">{name}</h2>
+          <p className="crops-statement">{statement}</p>
+          <ul className="crops-points">
+            {points.map((t) => <li key={t}>{t}</li>)}
+          </ul>
+          <div className="crops-limit">
+            <span className="mono-label">Honest limit</span>
+            <p>{limit}</p>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function Banner({ line, sub, small }: { line: string; sub: string; small: string }) {
   return (
     <div className="banner">
@@ -177,29 +199,15 @@ const EF_SLIDES: SlideDef[] = [
     id: 'e-workflow',
     render: () => <WorkflowSlide intro={E.intro} steps={E.workflow} notes={E.notes} />,
   },
-  {
-    id: 'e-crops',
-    render: () => (
-      <>
-        <Title label="03 · CROPS">{E.cropsTitle}</Title>
-        <div className="cols2 even">
-          <div>
-            <p className="mono-label">CROPS, one line each</p>
-            <Rows items={E.crops} />
-          </div>
-          <div>
-            <p className="mono-label">What each party can see</p>
-            <Rows items={E.sees} />
-          </div>
-        </div>
-      </>
-    ),
-  },
+  ...E.cropsSlides.map(([mark, name, statement, points, limit], n): SlideDef => ({
+    id: `e-crops-${mark}`,
+    render: () => <CropsSlide step={n + 1} mark={mark} name={name} statement={statement} points={points} limit={limit} />,
+  })),
   {
     id: 'e-stack',
     render: () => (
       <>
-        <Title label="04 · Privacy stack">{E.stackTitle}</Title>
+        <Title label="07 · Privacy stack">{E.stackTitle}</Title>
         <div className="cols2 even">
           <div>
             <p className="mono-label">The privacy stack, including Anon-RPC</p>
