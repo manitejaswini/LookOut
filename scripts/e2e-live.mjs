@@ -127,9 +127,10 @@ try {
   const deposit = parseEther(String(CONFIG.DEPOSIT_ETH));
   const bounty = parseEther(String(CONFIG.BOUNTY_ETH));
   check(owed >= deposit + bounty, 'the deposit AND the bounty are waiting for the reporter in the escrow', formatEther(owed) + ' ETH');
-  const before = await sep.getBalance({ address: reporterAccount.address });
-  await reporterEscrow.claim();
-  const after = await sep.getBalance({ address: reporterAccount.address });
+  // balances are read AT the claim's own block, so a public RPC that lags a block behind cannot hide the change
+  const claimTx = await reporterEscrow.claim();
+  const before = await sep.getBalance({ address: reporterAccount.address, blockNumber: claimTx.blockNumber - 1n });
+  const after = await sep.getBalance({ address: reporterAccount.address, blockNumber: claimTx.blockNumber });
   check(after - before > deposit + bounty - parseEther('0.0005'), 'the reporter claims both with one transaction, to the wallet that filed the report', `+${formatEther(after - before)} ETH after gas`);
 
   console.log('B. a report nobody corroborates is refunded when the window closes, never forfeited');
