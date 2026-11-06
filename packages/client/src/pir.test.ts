@@ -184,3 +184,37 @@ test('the hash table is downloaded once per snapshot, not per lookup', async () 
 test('no pairs configured is a clear error', async () => {
   await assert.rejects(createPirClient({ pairs: [], fetch: world().fetch }).checkTarget('scam.xyz'), /no PIR server pairs/);
 });
+
+test('EVENTS: a lookup reports its real steps in order, two rounds, ending in scored', async () => {
+  const w = world();
+  const types: string[] = [];
+  await client(w, { publishedRoots: async () => [SNAP.root] }).checkTarget('scam.xyz', undefined, (e) => types.push(e.type));
+  assert.deepEqual(types, ['hashed', 'snapshot', 'table', 'query', 'combined', 'bucket-verified', 'query', 'combined', 'bucket-verified', 'scored']);
+});
+
+test('EVENTS: the vectors in the events are exactly the bytes the two servers received', async () => {
+  const w = world();
+  const sent: { a: Uint8Array; b: Uint8Array }[] = [];
+  await client(w).checkTarget('scam.xyz', undefined, (e) => { if (e.type === 'query') sent.push({ a: e.a, b: e.b }); });
+  const got = (base: string) => queries(w, base).map((q) => new Uint8Array(Buffer.from(JSON.parse(q.body).vector, 'base64')));
+  assert.deepEqual(got(PAIR1.a), sent.map((s) => s.a));
+  assert.deepEqual(got(PAIR1.b), sent.map((s) => s.b));
+});
+
+test('EVENTS: the table event says whether Arkiv vouched for it', async () => {
+  const seen: boolean[] = [];
+  const grab = (e: { type: string; matchedPublishedRoot?: boolean }) => { if (e.type === 'table') seen.push(e.matchedPublishedRoot!); };
+  await client(world(), { publishedRoots: async () => [SNAP.root] }).checkTarget('scam.xyz', undefined, grab);
+  await client(world()).checkTarget('scam.xyz', undefined, grab);
+  assert.deepEqual(seen, [true, false]);
+});
+
+test('EVENTS: a failed pair emits retry with the reason before the next pair runs', async () => {
+  const w = world({ tamper: new Set([PAIR1.b]) });
+  const events: string[] = [];
+  let reason = '';
+  await client(w, { pairs: [PAIR1, PAIR2] }).checkTarget('scam.xyz', undefined, (e) => { events.push(e.type); if (e.type === 'retry') reason = e.reason; });
+  assert.ok(events.includes('retry'));
+  assert.match(reason, /does not match the hash table/);
+  assert.ok(events.indexOf('retry') < events.lastIndexOf('scored'));
+});

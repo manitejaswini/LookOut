@@ -28,6 +28,22 @@ export interface PirOptions {
 
 export class VerificationError extends LookupError {}
 
+/**
+ * What the client is doing, as it happens, so a UI can show the real steps. The vectors are the
+ * exact bytes sent to each server, which only this device ever pairs together.
+ */
+export type PirEvent =
+  | { type: 'hashed' }
+  | { type: 'snapshot'; snapshotId: string; root: string }
+  | { type: 'table'; matchedPublishedRoot: boolean }
+  | { type: 'query'; round: number; rounds: number; a: Uint8Array; b: Uint8Array }
+  | { type: 'combined'; round: number; rounds: number }
+  | { type: 'bucket-verified'; round: number; rounds: number }
+  | { type: 'retry'; pair: PirPair; reason: string }
+  | { type: 'scored' };
+
+export type OnPirEvent = (e: PirEvent) => void;
+
 const b64 = (v: Uint8Array) => btoa(String.fromCharCode(...v));
 
 interface Fetched {
@@ -48,12 +64,13 @@ export function createPirClient(opts: PirOptions) {
     return (await res.json()) as T;
   };
 
-  async function viaPair(pair: PirPair, key: Uint8Array): Promise<Fetched> {
+  async function viaPair(pair: PirPair, key: Uint8Array, emit: OnPirEvent): Promise<Fetched> {
     const [la, lb] = await Promise.all([
       json<{ snapshotId: string; root: string; bucketCount: number }>(`${pair.a}/snapshot/latest`),
       json<{ snapshotId: string; root: string; bucketCount: number }>(`${pair.b}/snapshot/latest`),
     ]);
     if (la.snapshotId !== lb.snapshotId || la.root !== lb.root) throw new VerificationError('the two servers disagree about the latest snapshot');
+    emit({ type: 'snapshot', snapshotId: la.snapshotId, root: la.root });
 
     const cacheKey = `${pair.a}|${la.snapshotId}|${la.root}`;
     let hashes = tableCache.get(cacheKey);
@@ -72,12 +89,14 @@ export function createPirClient(opts: PirOptions) {
       if (!verifyTable(hashes, roots)) throw new VerificationError('hash table does not match any root published on Arkiv');
       verified = true;
     }
+    emit({ type: 'table', matchedPublishedRoot: verified });
 
     const order = candidates(key, la.bucketCount);
     if (crypto.getRandomValues(new Uint8Array(1))[0] & 1) order.reverse();
     const buckets: Uint8Array[] = [];
     for (const index of order) {
       const { a, b } = queryPair(index, la.bucketCount);
+      emit({ type: 'query', round: buckets.length, rounds: order.length, a, b });
       const ask = async (base: string, v: Uint8Array) => {
         let res: Response;
         try {
@@ -89,24 +108,31 @@ export function createPirClient(opts: PirOptions) {
       const [ra, rb] = await Promise.all([ask(pair.a, a), ask(pair.b, b)]);
       if (ra.length !== BUCKET_SIZE || rb.length !== BUCKET_SIZE) throw new VerificationError('a server returned a wrong-sized answer');
       const bucket = combine(ra, rb);
+      emit({ type: 'combined', round: buckets.length, rounds: order.length });
       if (!verifyBucket(hashes, index, bucket)) throw new VerificationError(`bucket ${index} does not match the hash table (a server tampered or the tables differ)`);
+      emit({ type: 'bucket-verified', round: buckets.length, rounds: order.length });
       buckets.push(bucket);
     }
     return { snapshotId: la.snapshotId, verified, buckets };
   }
 
-  async function fetchBuckets(key: Uint8Array): Promise<Fetched> {
+  async function fetchBuckets(key: Uint8Array, emit: OnPirEvent): Promise<Fetched> {
     if (opts.pairs.length === 0) throw new LookupError('no PIR server pairs configured');
     const failures: string[] = [];
     for (const pair of opts.pairs) {
-      try { return await viaPair(pair, key); } catch (e) { failures.push(`${pair.a} + ${pair.b}: ${(e as Error).message}`); }
+      try { return await viaPair(pair, key, emit); } catch (e) {
+        const reason = (e as Error).message;
+        failures.push(`${pair.a} + ${pair.b}: ${reason}`);
+        emit({ type: 'retry', pair, reason });
+      }
     }
     throw new VerificationError(`every PIR server pair failed. ${failures.join(' | ')}`);
   }
 
-  async function checkTarget(value: string, kind: TargetKind = inferKind(value)): Promise<CheckResult> {
+  async function checkTarget(value: string, kind: TargetKind = inferKind(value), onEvent: OnPirEvent = () => {}): Promise<CheckResult> {
     const key = keyFromHex(targetHash(kind, value)); // throws on malformed input, before any request
-    const { snapshotId, verified, buckets } = await fetchBuckets(key);
+    onEvent({ type: 'hashed' });
+    const { snapshotId, verified, buckets } = await fetchBuckets(key, onEvent);
     const hit = findRecord(key, 'target', buckets);
     const t = emptyTarget(value, kind);
     if (hit && hit.kind === 'target') {
@@ -121,13 +147,15 @@ export function createPirClient(opts: PirOptions) {
       if (hit.flags & FLAG_RULING_BLOCK) t.ruling = 'block';
       else if (hit.flags & FLAG_RULING_CLEAR) t.ruling = 'clear';
     }
-    return { ...scoreTarget(t), snapshotId, verified };
+    const scored = { ...scoreTarget(t), snapshotId, verified };
+    onEvent({ type: 'scored' });
+    return scored;
   }
 
   /** Reporter side of a stealth bounty: look up your own reportId, privately. */
   async function findBounty(reportId: string) {
     const key = bountyKey(reportId);
-    const { snapshotId, verified, buckets } = await fetchBuckets(key);
+    const { snapshotId, verified, buckets } = await fetchBuckets(key, () => {});
     const hit = findRecord(key, 'bounty', buckets);
     return hit && hit.kind === 'bounty' ? { tier: hit.tier, ephemeralPublicKey: hit.ephemeralPublicKey, snapshotId, verified } : null;
   }

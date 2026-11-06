@@ -151,6 +151,9 @@ input[type="text"], .input-row input {
 .bits { display: grid; grid-template-columns: repeat(16, 1fr); gap: 2px; margin-top: 8px; }
 .bits span { aspect-ratio: 1; background: var(--line-2); }
 .bits span.on { background: var(--blue); }
+.bits span.flip { outline: 2px solid var(--ink); outline-offset: 1px; position: relative; z-index: 1; }
+.srvlogs { margin-top: 16px; }
+.srvlog { margin: 6px 0 0; padding: 8px 10px; background: var(--line-2); font: 11px/1.5 var(--mono); overflow-x: auto; white-space: pre; }
 
 .verdict { margin-top: 20px; padding: 20px; border: 1px solid var(--ink); }
 .verdict-head { display: flex; align-items: center; gap: 12px; }

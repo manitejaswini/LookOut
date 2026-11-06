@@ -1,4 +1,5 @@
 import { createClient, createPirClient } from '@lookout/client';
+import type { OnPirEvent } from '@lookout/client';
 import type { CheckResult, TargetKind } from '@lookout/core';
 import { checkTarget as mockCheck } from './mock';
 
@@ -16,15 +17,19 @@ const pirB = process.env.NEXT_PUBLIC_PIR_B;
 const roots = process.env.NEXT_PUBLIC_PIR_ROOTS?.split(',').map((r) => r.trim().toLowerCase()).filter(Boolean);
 const indexerUrl = process.env.NEXT_PUBLIC_INDEXER_URL;
 
-const live = pirA && pirB
+const pirClient = pirA && pirB
   ? createPirClient({ pairs: [{ a: pirA, b: pirB }], publishedRoots: roots?.length ? async () => roots : undefined })
-  : indexerUrl
-    ? createClient({ indexerUrl })
-    : null;
+  : null;
+const live = pirClient ?? (indexerUrl ? createClient({ indexerUrl }) : null);
 
 export const MODE: 'pir' | 'indexer' | 'mock' = pirA && pirB ? 'pir' : indexerUrl ? 'indexer' : 'mock';
 export const LIVE = live !== null;
 
-export async function checkTarget(value: string, kind?: TargetKind): Promise<CheckResult> {
+/** The PIR servers, for showing what each one logged. Null unless running in pir mode. */
+export const PIR_SERVERS = pirA && pirB ? { a: pirA, b: pirB } : null;
+
+/** `onEvent` reports the real PIR steps as they happen. Other modes never call it. */
+export async function checkTarget(value: string, kind?: TargetKind, onEvent?: OnPirEvent): Promise<CheckResult> {
+  if (pirClient) return pirClient.checkTarget(value, kind, onEvent);
   return live ? live.checkTarget(value, kind) : mockCheck(value);
 }

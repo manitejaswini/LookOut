@@ -2,73 +2,128 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { TARGETS, findTarget } from './mock';
-import { checkTarget } from './lookup';
+import { checkTarget, MODE, PIR_SERVERS } from './lookup';
 import { fmtAge } from './hooks';
 import { SNAPSHOT_ID } from '@lookout/core';
 import type { CheckResult } from '@lookout/core';
+import type { PirEvent } from '@lookout/client';
 
-const STEPS = [
+const stepList = (snapshotId: string, rootChecked: boolean | null) => [
   'Hash the target on this device',
   'Send a random vector to PIR server A',
   'Send the same vector, one bit flipped, to server B',
   'XOR both 512-byte answers into the bucket',
-  `Verify bucket hash against root of ${SNAPSHOT_ID} on Arkiv`,
+  rootChecked === false
+    ? `Check bucket against the servers' own table of ${snapshotId} (no Arkiv root to compare: UNVERIFIED)`
+    : `Verify bucket hash against root of ${snapshotId} on Arkiv`,
   'Score signals: block, warn or unknown',
 ];
+const STEP_COUNT = 6;
+const STEP_MS = 320; // pacing only: a real lookup takes about 35 ms, too fast to follow
 
-const randomBits = () => {
-  const a = new Uint8Array(64);
-  crypto.getRandomValues(a);
-  return Array.from(a, (b) => b & 1);
+interface VecView { a: number[]; b: number[]; flip: number }
+
+const bitsAt = (v: Uint8Array, from: number) =>
+  Array.from({ length: 64 }, (_, k) => (v[(from + k) >> 3] >> (7 - ((from + k) & 7))) & 1);
+
+/** A 64-bit window of the real vectors that contains the one bit where they differ. */
+function windowOf(a: Uint8Array, b: Uint8Array): VecView {
+  let d = 0;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) { d = i * 8 + Math.clz32(a[i] ^ b[i]) - 24; break; }
+  const from = Math.max(0, Math.min(a.length * 8 - 64, (d - 24) & ~7));
+  return { a: bitsAt(a, from), b: bitsAt(b, from), flip: d - from };
+}
+
+const simulatedVec = (): VecView => {
+  const a = crypto.getRandomValues(new Uint8Array(8));
+  const b = a.slice();
+  b[Math.floor(Math.random() * 8)] ^= 1 << Math.floor(Math.random() * 8);
+  return windowOf(a, b);
 };
 
-function Bits({ bits, label }: { bits: number[]; label: string }) {
+function Bits({ bits, label, flip }: { bits: number[]; label: string; flip: number }) {
   return (
     <div className="bits-wrap">
       <div className="mono-label">{label}</div>
       <div className="bits" aria-label={`${label} random-looking vector`}>
-        {bits.map((b, i) => <span key={i} className={b ? 'on' : ''} />)}
+        {bits.map((b, i) => <span key={i} className={`${b ? 'on' : ''} ${i === flip ? 'flip' : ''}`} />)}
       </div>
     </div>
   );
 }
 
+interface ServerLog { name: string; lines: string[] }
+
 export default function Check() {
   const [value, setValue] = useState(TARGETS[0].value);
-  const [step, setStep] = useState(-1); // -1 idle, 0..5 running, 6 done
+  const [step, setStep] = useState(-1); // steps completed: -1 idle, 0..5 running, 6 done
   const [result, setResult] = useState<CheckResult | null>(null);
-  const [vec, setVec] = useState<{ a: number[]; b: number[] } | null>(null);
+  const [ready, setReady] = useState<CheckResult | null>(null); // answer received, waiting for the animation to catch up
+  const [vec, setVec] = useState<VecView | null>(null);
+  const [snapshotId, setSnapshotId] = useState(SNAPSHOT_ID);
+  const [rootChecked, setRootChecked] = useState<boolean | null>(null);
   const [signed, setSigned] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+  const [logs, setLogs] = useState<ServerLog[] | null>(null);
   const runId = useRef(0);
-  const timer = useRef<number>(0);
+  const want = useRef(0); // furthest step the real events have reached
+  const pacer = useRef<number>(0);
 
-  useEffect(() => () => clearTimeout(timer.current), []);
+  useEffect(() => () => clearInterval(pacer.current), []);
+
+  // walk the displayed step up to the furthest real step, one readable beat at a time
+  useEffect(() => {
+    if (step < 0 || step >= STEP_COUNT) { clearInterval(pacer.current); return; }
+    pacer.current = window.setInterval(() => setStep((s) => (s >= 0 && s < want.current ? s + 1 : s)), STEP_MS);
+    return () => clearInterval(pacer.current);
+  }, [step < 0 ? -1 : step >= STEP_COUNT ? 1 : 0]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (ready && step >= STEP_COUNT) setResult(ready);
+  }, [ready, step]);
+
+  // after a live lookup, show what each server actually logged
+  useEffect(() => {
+    const servers = PIR_SERVERS;
+    if (!result || !servers) return;
+    let live = true;
+    Promise.all(
+      (['A', 'B'] as const).map(async (name) => {
+        const r = await fetch(`${name === 'A' ? servers.a : servers.b}/log`);
+        return { name, lines: ((await r.json()).lines as string[]).slice(-2) };
+      }),
+    ).then((l) => { if (live) setLogs(l); }, () => {});
+    return () => { live = false; };
+  }, [result]);
 
   const run = (v = value) => {
-    clearTimeout(timer.current);
     const id = ++runId.current;
-    setResult(null);
-    setError(null);
-    setSigned(false);
+    setResult(null); setReady(null); setError(null); setNote(null); setLogs(null); setSigned(false);
+    setVec(null); setRootChecked(null); setSnapshotId(SNAPSHOT_ID);
+    want.current = 0;
     setStep(0);
-    const a = randomBits();
-    const b = [...a];
-    b[Math.floor(Math.random() * 64)] ^= 1; // differs at the target bit, looks random
-    setVec({ a, b });
-    let i = 0;
-    const tick = () => {
-      i++;
-      setStep(i);
-      if (i < STEPS.length) timer.current = window.setTimeout(tick, 380);
-      else {
-        checkTarget(v).then(
-          (r) => { if (id === runId.current) setResult(r); },
-          (e: Error) => { if (id === runId.current) setError(e.message); },
-        );
+
+    const reach = (n: number) => { want.current = Math.max(want.current, n); };
+    const onEvent = (e: PirEvent) => {
+      if (id !== runId.current) return;
+      switch (e.type) {
+        case 'hashed': reach(1); break;
+        case 'snapshot': setSnapshotId(e.snapshotId); break;
+        case 'table': setRootChecked(e.matchedPublishedRoot); break;
+        case 'query': if (e.round === 0) setVec(windowOf(e.a, e.b)); reach(3); break;
+        case 'combined': reach(4); break;
+        case 'bucket-verified': if (e.round === e.rounds - 1) reach(5); break;
+        case 'retry': setNote(`A server pair failed verification (${e.reason}). Trying the next pair.`); break;
+        case 'scored': reach(6); break;
       }
     };
-    timer.current = window.setTimeout(tick, 380);
+
+    if (MODE !== 'pir') { setVec(simulatedVec()); reach(STEP_COUNT); } // simulated: nothing real to wait for
+    checkTarget(v, undefined, onEvent).then(
+      (r) => { if (id === runId.current) { reach(STEP_COUNT); setReady(r); } },
+      (e: Error) => { if (id === runId.current) { setError(e.message); setStep(-1); } },
+    );
   };
 
   const pick = (v: string) => {
@@ -76,7 +131,8 @@ export default function Check() {
     run(v);
   };
   const target = findTarget(value);
-  const running = step >= 0 && step < STEPS.length;
+  const running = step >= 0 && step < STEP_COUNT;
+  const STEPS = stepList(snapshotId, rootChecked);
 
   return (
     <section id="check" className="section">
@@ -99,7 +155,7 @@ export default function Check() {
         <div className="wallet">
           <div className="wallet-bar">
             <span className="mono-label">DEMO WALLET · SEPOLIA</span>
-            <span className="mono-label">0x4a1c…9e20</span>
+            <span className="mono-label">{MODE === 'pir' ? 'LIVE · 2-SERVER PIR' : MODE === 'indexer' ? 'LIVE · PLAIN LOOKUP (NOT PRIVATE)' : 'SIMULATED · MOCK DATA'}</span>
           </div>
           <label className="mono-label" htmlFor="target">Target (domain, address or contract)</label>
           <form className="input-row" onSubmit={(e) => { e.preventDefault(); run(); }}>
@@ -116,20 +172,36 @@ export default function Check() {
           {step >= 0 && (
             <ol className="steps">
               {STEPS.map((s, i) => (
-                <li key={s} className={i < step ? 'done' : i === step ? 'now' : ''}>{s}</li>
+                <li key={i} className={i < step ? 'done' : i === step ? 'now' : ''}>{s}</li>
               ))}
             </ol>
           )}
 
           {vec && step >= 1 && (
             <div className="servers">
-              <Bits bits={vec.a} label="Server A saw" />
-              <Bits bits={vec.b} label="Server B saw" />
-              <p className="tiny">Each server sees only a random-looking vector. Never the target.</p>
+              <Bits bits={vec.a} label="Server A saw" flip={vec.flip} />
+              <Bits bits={vec.b} label="Server B saw" flip={vec.flip} />
+              <p className="tiny">
+                {MODE === 'pir'
+                  ? 'The exact vectors sent, 64 of 16,384 bits. The marked bit is where they differ: only this device knows which bucket that is. Both candidate buckets are requested, so a miss looks like a hit.'
+                  : 'Simulated vectors: no PIR servers are running in this mode. Each real server sees only a random-looking vector, never the target.'}
+              </p>
             </div>
           )}
 
+          {note && <p className="tiny" role="status">{note}</p>}
           {error && <p className="tiny" role="alert">Lookup failed: {error}</p>}
+
+          {logs && (
+            <div className="srvlogs">
+              <div className="mono-label">What the two servers logged</div>
+              {logs.map((l) => (
+                <pre key={l.name} className="srvlog"><code>{l.lines.join('\n') || '(nothing yet)'}</code></pre>
+              ))}
+              <p className="tiny">Vectors and bit counts only. There is no target, domain or bucket number to log.</p>
+            </div>
+          )}
+
           {result && <Verdict r={result} signed={signed} onSign={() => setSigned(true)} />}
         </div>
       </div>
