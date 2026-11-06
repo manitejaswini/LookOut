@@ -4,6 +4,7 @@
 //
 // Writes one report, one verdict and one attestation for a reserved .example domain, refreshes the
 // verdict, and reads all three back by targetHash. It never prints a key.
+import './safe-errors.mjs';
 
 import { existsSync } from 'node:fs';
 import { eq } from '@arkiv-network/sdk/query';

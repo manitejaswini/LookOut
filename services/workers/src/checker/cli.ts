@@ -9,6 +9,8 @@
 //   ETH_RPC_URL                           an Ethereum JSON-RPC endpoint, needed for `contract`
 //   FLAG_LIST / DRAINER_LIST              paths to override services/workers/lists/*.json
 // Flagged destinations also include everything Lookout already blocks, if the indexer cache has been synced.
+import { installErrorScrubbing } from '@lookout/arkiv';
+installErrorScrubbing();
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

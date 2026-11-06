@@ -11,8 +11,8 @@
  * Use `staging` only while testing with the World ID simulator.
  */
 
-/** The action scopes what a proof is for. One human gets one reviewer seat per action. */
-export const REVIEWER_ACTION = 'lookout-reviewer-seat-v1';
+/** The action scopes what a proof is for. One human gets one verified-human wallet per action. */
+export const HUMAN_ACTION = 'lookout-verified-human-v1';
 
 export type WorldEnvironment = 'production' | 'staging' | 'sandbox';
 
@@ -63,7 +63,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       rpId: rpId!,
       signingKeyHex: rawKey!.replace(/^0x/, ''),
       environment: environment as WorldEnvironment,
-      action: REVIEWER_ACTION,
+      action: HUMAN_ACTION,
       verifyBaseUrl: env.WORLD_ID_VERIFY_BASE_URL?.trim() || DEFAULT_VERIFY_BASE_URL,
     },
   };

@@ -11,11 +11,9 @@ export const LIFETIMES: Record<Kind, () => ReturnType<typeof ExpirationTime.from
   verdict: () => ExpirationTime.fromHours(CONFIG.VERDICT_REFRESH_HOURS),
   attestation: () => ExpirationTime.fromDays(CONFIG.ATTESTATION_DAYS),
   stake: () => ExpirationTime.fromDays(CONFIG.STAKE_DAYS),
-  vote: () => ExpirationTime.fromDays(CONFIG.VOTE_DAYS),
   ruling: () => ExpirationTime.fromDays(CONFIG.RULING_DAYS),
   reputation: () => ExpirationTime.fromDays(CONFIG.REPUTATION_DAYS),
   snapshot: () => ExpirationTime.fromDays(CONFIG.SNAPSHOT_DAYS),
-  bounty: () => ExpirationTime.fromDays(CONFIG.BOUNTY_DAYS),
 };
 
 /** What a verdict refresh asks `extendEntity` for: another full verdict lifetime counted from now. */
@@ -23,7 +21,7 @@ export const VERDICT_REFRESH = LIFETIMES.verdict;
 
 /**
  * Creation flags (cannot be changed after creation).
- *  - `readonly`: nobody can patch the entity. Set everywhere except `stake` (status changes) and `vote` (reveal).
+ *  - `readonly`: nobody can patch the entity. Set everywhere except `stake` (status changes).
  *  - `permissionlessExtension` is never set: it would let anyone pay gas to keep any report alive.
  */
 export const CREATION_FLAGS: Record<Kind, { readonly?: boolean }> = {
@@ -31,9 +29,7 @@ export const CREATION_FLAGS: Record<Kind, { readonly?: boolean }> = {
   verdict: { readonly: true },
   attestation: { readonly: true },
   stake: {},
-  vote: {},
   ruling: { readonly: true },
   reputation: { readonly: true },
   snapshot: { readonly: true },
-  bounty: { readonly: true },
 };

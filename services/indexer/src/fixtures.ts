@@ -11,7 +11,7 @@ export const ADDR = {
   feed: '0x2222222222222222222222222222222222222222',
   verifier: '0x3333333333333333333333333333333333333333',
   attester: '0x4444444444444444444444444444444444444444',
-  panel: '0x5555555555555555555555555555555555555555',
+  operator: '0x5555555555555555555555555555555555555555',
   rep82: '0x6666666666666666666666666666666666666666',
   rep100: '0x7777777777777777777777777777777777777777',
   stranger: '0x8888888888888888888888888888888888888888',
@@ -24,7 +24,7 @@ export const registry: Registry = parseRegistry({
     { sourceId: 'partner-verifier', sourceType: 'verifier', address: ADDR.verifier },
   ],
   attesters: [ADDR.attester],
-  panel: ADDR.panel,
+  operator: ADDR.operator,
   reputation: { [ADDR.rep82]: 82, [ADDR.rep100]: 100 },
 });
 

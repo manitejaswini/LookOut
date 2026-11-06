@@ -59,7 +59,7 @@ test('a different reputation checkpoint changes the weights, and so the root (al
 
 test('targets with nothing to say are left out, but a ruling alone is kept', () => {
   const other = targetHash('domain', 'only-cleared.example');
-  const { targets } = buildTargets([ruling(ADDR.panel, 'clear', other), report(ADDR.stranger, targetHash('domain', 'only-a-fresh-report.example'))], timing, registry);
+  const { targets } = buildTargets([ruling(ADDR.operator, 'clear', other), report(ADDR.stranger, targetHash('domain', 'only-a-fresh-report.example'))], timing, registry);
   const records = toTargetRecords(targets, timing);
   assert.equal(records.length, 2, 'a fresh-wallet report still counts as a (zero weight) signal');
   const cleared = records.find((r) => r.targetHash === other)!;
@@ -75,7 +75,7 @@ test('an unlisted target is a miss', () => {
 
 test('a block ruling sets the ruling flag', () => {
   const other = targetHash('domain', 'ruled.example');
-  const { targets } = buildTargets([ruling(ADDR.panel, 'block', other)], timing, registry);
+  const { targets } = buildTargets([ruling(ADDR.operator, 'block', other)], timing, registry);
   const snap = buildStoreSnapshot(targets, timing, N);
   assert.equal(recordFor(snap, other)?.flags, FLAG.rulingBlock);
 });

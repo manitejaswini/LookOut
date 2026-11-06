@@ -76,8 +76,8 @@ test('the same event reported twice counts once, whatever the address case', () 
 
 test('DETERMINISM: the same events in any order give the same scores', () => {
   const events = [
-    ev(A, 'report_confirmed', 100, 'r1'), ev(B, 'report_rejected', 100, 'r2'), ev(A, 'juror_won', 150, 'c1'), ev(B, 'report_confirmed', 150, 'r3'),
-    ev(A, 'report_rejected', 200, 'r4'), ev(B, 'juror_lost', 250, 'c2'), ev(A, 'report_confirmed', 250, 'r5'),
+    ev(A, 'report_confirmed', 100, 'r1'), ev(B, 'report_rejected', 100, 'r2'), ev(B, 'report_confirmed', 150, 'r3'),
+    ev(A, 'report_rejected', 200, 'r4'), ev(A, 'report_confirmed', 250, 'r5'),
   ];
   const baseline = [...first(events).scores].sort();
   for (let i = 0; i < 25; i++) {
@@ -91,11 +91,28 @@ test('where the zero floor makes order matter, the fixed order (time first) deci
   assert.equal(score(first([ev(A, 'report_confirmed', 100, 'r1'), ev(A, 'report_rejected', 200, 'r2')]), A), 0);
 });
 
-test('jurors earn a little for the majority and lose more against it', () => {
-  const c = first([ev(A, 'juror_won', 100, 'c1'), ev(B, 'juror_lost', 100, 'c1')]);
-  assert.equal(score(c, A), CONFIG.REP_JUROR_WIN);
+test('a verified human has a floor, a fresh wallet has none, and the floor never exceeds what one report needs to be taken seriously', () => {
+  const c = nextCheckpoint(null, [], 1000, 'rep-1', undefined, new Set([A]));
+  assert.equal(score(c, A), CONFIG.HUMAN_BASE_REP);
   assert.equal(c.scores.has(B), false);
-  assert.ok(CONFIG.REP_JUROR_LOSS > CONFIG.REP_JUROR_WIN);
+  assert.ok(reportWeight(CONFIG.HUMAN_BASE_REP) < 0.5, 'one human alone cannot reach the 0.5 block threshold');
+});
+
+test('the floor holds through rejections and decay, and good history still rises above it', () => {
+  const humans = new Set([A]);
+  let c = nextCheckpoint(null, [ev(A, 'report_rejected', 100, 'r1')], 1000, 'rep-1', undefined, humans);
+  assert.equal(score(c, A), CONFIG.HUMAN_BASE_REP, 'a rejection cannot push a human below the floor');
+  for (let i = 1; i <= 30; i++) c = nextCheckpoint(c, [], 1000 + i * 30 * DAY, `rep-${i + 1}`, undefined, humans);
+  assert.equal(score(c, A), CONFIG.HUMAN_BASE_REP, 'decay stops at the floor');
+  const T = 1000 + 30 * 30 * DAY; // the time of the last checkpoint above
+  const many = Array.from({ length: 12 }, (_, i) => ev(A, 'report_confirmed', T + 1 + i, `c${i}`));
+  assert.ok(score(nextCheckpoint(c, many, T + 100, 'rep-x', undefined, humans), A) > CONFIG.HUMAN_BASE_REP);
+});
+
+test('losing the human status takes the floor away at the next checkpoint', () => {
+  const c1 = nextCheckpoint(null, [], 1000, 'rep-1', undefined, new Set([A]));
+  const c2 = nextCheckpoint(c1, [], 1000 + 60 * DAY, 'rep-2');
+  assert.ok(score(c2, A) < CONFIG.HUMAN_BASE_REP, 'decaying with no floor');
 });
 
 test('a checkpoint cannot go back in time', () => {

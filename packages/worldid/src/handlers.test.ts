@@ -15,7 +15,7 @@ const ENV = {
 
 function deps(over: Partial<HandlerDeps> = {}, env: Record<string, string | undefined> = ENV): HandlerDeps & { store: () => SqliteSeatStore } {
   const store = new SqliteSeatStore();
-  return { config: () => loadConfig(env), store: () => store, fetchImpl: fakeWorld().fetchImpl, ...over } as HandlerDeps & { store: () => SqliteSeatStore };
+  return { config: () => loadConfig(env), store: () => store, fetchImpl: fakeWorld().fetchImpl, ownsWallet: () => true, ...over } as HandlerDeps & { store: () => SqliteSeatStore };
 }
 
 const post = (path: string, body: unknown) =>
@@ -39,14 +39,14 @@ test('status: unconfigured names the missing variables and never echoes a value'
 test('status: configured reports the environment, the fixed action and the seat count', async () => {
   const d = deps();
   const body = await (await handleStatus(get('/'), d)).json() as Record<string, unknown>;
-  assert.deepEqual(body, { configured: true, environment: 'staging', action: 'lookout-reviewer-seat-v1', seats: 0 });
+  assert.deepEqual(body, { configured: true, environment: 'staging', action: 'lookout-verified-human-v1', seats: 0 });
 });
 
 test('rp-signature: returns a signed RP context, and the action is fixed on the server (a client-supplied one is ignored)', async () => {
   const res = await handleRpSignature(post('/api/worldid/rp-signature', { action: 'steal-the-airdrop' }), deps());
   assert.equal(res.status, 200);
   const body = await res.json() as { rp_context: Record<string, unknown>; app_id: string; action: string; environment: string };
-  assert.equal(body.action, 'lookout-reviewer-seat-v1', 'the client cannot choose what the server signs');
+  assert.equal(body.action, 'lookout-verified-human-v1', 'the client cannot choose what the server signs');
   assert.equal(body.app_id, config.appId);
   assert.equal(body.environment, 'staging');
   assert.equal(body.rp_context.rp_id, config.rpId);
@@ -100,7 +100,7 @@ test('ALREADY ENROLLED over HTTP: the same human with a second wallet gets a 409
   assert.equal(res.status, 409);
   const body = await res.json() as { error: string; message: string; seats: number };
   assert.equal(body.error, 'human_already_enrolled');
-  assert.match(body.message, /One human, one seat/);
+  assert.match(body.message, /One human, one wallet/);
   assert.equal(body.seats, 1);
 });
 
@@ -183,4 +183,36 @@ test('verify and rp-signature are rate limited per client and answer 429', async
   assert.equal((await handleRpSignature(withIp('/', {}, '6.6.6.6'), d)).status, 200, 'another client is fine');
   assert.equal((await handleVerify(withIp('/', verifyBody(WALLET_A), '5.5.5.5'), d)).status, 200);
   assert.equal((await handleVerify(withIp('/', verifyBody(WALLET_B, HUMAN_2), '5.5.5.5'), d)).status, 429);
+});
+
+/* ---------- wallet ownership: the person must hold the key ---------- */
+
+import { privateKeyToAccount } from 'viem/accounts';
+import { humanMessage } from '@lookout/core';
+
+const keyed = privateKeyToAccount(('0x' + '88'.repeat(32)) as `0x${string}`);
+const keyedWallet = keyed.address.toLowerCase();
+
+test('WALLET OWNERSHIP over HTTP: with the real check, a missing or wrong signature is refused and the human is NOT recorded', async () => {
+  const d = deps({ ownsWallet: undefined });
+  const body = { wallet: keyedWallet, idkitResponse: payload({ wallet: keyedWallet }) };
+  const none = await handleVerify(post('/api/worldid/verify', body), d);
+  assert.equal(none.status, 400);
+  assert.equal(((await none.json()) as { error: string }).error, 'wallet_not_proven');
+
+  const stranger = privateKeyToAccount(('0x' + '99'.repeat(32)) as `0x${string}`);
+  const wrongSig = await stranger.signMessage({ message: humanMessage(keyedWallet, config.action) });
+  assert.equal((await handleVerify(post('/api/worldid/verify', { ...body, signature: wrongSig }), d)).status, 400);
+  assert.equal(d.store().count(config.action), 0, 'nothing was recorded');
+});
+
+test('WALLET OWNERSHIP over HTTP: the wallet signing its own message is accepted, and a signature for another action is not', async () => {
+  const d = deps({ ownsWallet: undefined });
+  const body = { wallet: keyedWallet, idkitResponse: payload({ wallet: keyedWallet }) };
+  const forOtherAction = await keyed.signMessage({ message: humanMessage(keyedWallet, 'some-other-action') });
+  assert.equal((await handleVerify(post('/api/worldid/verify', { ...body, signature: forOtherAction }), d)).status, 400);
+  const good = await keyed.signMessage({ message: humanMessage(keyedWallet, config.action) });
+  const res = await handleVerify(post('/api/worldid/verify', { ...body, signature: good }), d);
+  assert.equal(res.status, 200);
+  assert.equal(d.store().count(config.action), 1);
 });

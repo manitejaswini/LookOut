@@ -1,6 +1,8 @@
-# Lookout Arkiv schema (v0.1)
+# Lookout Arkiv schema (v0.2)
 
 This is the contract for every Arkiv entity Lookout reads or writes. Dev A owns it. Dev B reads it and does not edit it without Dev A's OK in the pull request. It follows the PRD ("Architecture and Arkiv data model"), and since v0.1 it is checked against the Arkiv docs and the published SDK (see [Sources](#sources-and-verification)).
+
+**v0.2 simplified the design.** There is no reviewer vote and no stealth bounty any more. A report is settled by evidence (a trusted source corroborates it), a bounty is credited to the reporter inside the escrow, and a single operator key publishes rulings with public reasons. The `vote` and `bounty` entity kinds are gone, leaving seven.
 
 - **Arkiv fact**: stated by the Arkiv docs. Cited in the Sources section.
 - **Proposed**: a decision made here, open to objection.
@@ -19,7 +21,6 @@ Reading the Arkiv docs overturned several v0 assumptions. Everything below is re
 | Expiry might be a timestamp | Expiry is a **block number**. Blocks take 2 seconds. Maximum lifetime is 7,884,000 blocks, about 182.5 days | All our lifetimes fit. 24 hours is 43,200 blocks |
 | Expiry can be extended by us | Only the **owner** can extend, unless the entity was created with the `permissionlessExtension` flag | See "Report confirmation" below. We do not use that flag |
 | `owner` is the trusted writer | Ownership is **transferable** (`changeOwnership`). `$creator` never changes | Every authorization check uses `$creator`, not `$owner` |
-| Reveal of a vote needs a second entity | Attributes can be **patched in place** by the owner (`patchEntity`) | A vote is one entity, patched at reveal |
 | Escrow might live on the Arkiv chain | Arkiv's testnet (Rabdi) is its own chain with its own gas token, tGLM | Escrow stays on an Ethereum testnet and `stake` entities mirror it |
 | Filter syntax `kind = 'report' && ...` | The query language uses `AND`, `OR`, and typed literals such as `str('report')` | Example queries rewritten |
 | An indexer can read any attribute | Only **indexed** attributes can be filtered. Sorting works on any. A page is at most 100 rows | Each attribute below says whether it is indexed. Indexers paginate by `$key` |
@@ -61,11 +62,11 @@ Limit: the domain rule matches an exact host. It does not group subdomains under
 
 ### `reportId` (Proposed)
 
-A random 128-bit value (32 hex digits), generated **by the reporter's client before anything is written**. It cannot be the Arkiv entity key, because the escrow deposit and the `stake` entity must reference the report before or at the same moment it exists. It links `report`, `stake` and `bounty`.
+A random 128-bit value (32 hex digits), generated **by the reporter's client before anything is written**. It cannot be the Arkiv entity key, because the escrow deposit and the `stake` entity must reference the report before or at the same moment it exists. It links `report` and `stake`.
 
 ### `caseId` (Proposed)
 
-`caseId = first 16 hex digits of keccak256(targetHash + ":" + triggerEntityKey)`, minted by the panel service when it opens a review. `triggerEntityKey` is the `$key` of the `attestation` that disputed a block, or of the `verdict` under review. It links `vote` and `ruling`. A case is not an entity of its own: it exists as the votes and ruling that carry its id.
+`caseId = first 16 hex digits of keccak256(targetHash + ":" + triggerEntityKey)`, minted by the operator when it rules. `triggerEntityKey` is the `$key` of the `attestation` that disputed a flag. It ties a `ruling` to the dispute it answers. A case is not an entity of its own.
 
 ## Enumerations
 
@@ -77,7 +78,7 @@ A random 128-bit value (32 hex digits), generated **by the reporter's client bef
 | `level` | `block`, `warn` | `verdict` |
 | `claim` | `legit`, `confirmed` | `attestation` |
 | `stakeStatus` | `locked`, `returned`, `slashed` | `stake` |
-| `outcome` | `block`, `clear` | `vote` (revealed), `ruling` |
+| `outcome` | `block`, `clear` | `ruling` |
 
 This matches `SourceType` in `packages/core`.
 
@@ -95,10 +96,11 @@ A scam report from a community member. Flag: `readonly`.
 | `targetHash` | `str` | yes | |
 | `targetKind` | `str` | yes | enum |
 | `category` | `str` | yes | enum |
-| `payload` | `bytes` optional | no | evidence pointer (hash and where to fetch it) and the reporter's stealth meta-address, **encrypted**. Raw evidence stays off Arkiv |
+| `payload` | `bytes` optional | no | the plain target (see below). Raw evidence stays off Arkiv |
 
 - **Authorized writer:** any wallet. Its weight is the creator's reputation, scaled by `min(1, rep / cap)`.
 - **Lifetime:** 24 hours (43,200 blocks).
+- **Payload (v0):** JSON `{"v":0,"k":"domain|address|contract","t":"<plain target>"}` (`packages/core/src/report-payload.ts`). The plain target is there so the operator can act on the report, since the entity only carries the target's hash. The operator checks that it hashes to `targetHash`, so a report cannot be re-pointed. It is public, like the report that names it.
 - **Report confirmation (Proposed):** a confirmed report is **not** extended. Extension is owner-only, and the alternative, `permissionlessExtension`, would let anyone pay gas to keep any report alive for up to 182 days, which defeats "spam vanishes in 24 hours". Instead, confirmation is recorded where it is anyway needed: `stake.status = returned` and the `ruling`. The indexer carries confirmed reports forward through the `reputation` checkpoint (below), so the report entity itself may expire.
 
 ### `lookout.v0.verdict`
@@ -129,9 +131,10 @@ The target's owner replies to a flag. Flag: `readonly`.
 | `claim` | `str` | yes | `legit` (owner disputes the flag) or `confirmed` |
 | `payload` | `bytes` optional | no | proof of control: a deployer signature over the `targetHash`, or an ENS name that resolves to the owner |
 
-- **Authorized writer:** any wallet, but the proof in the payload must verify. Owners of domains are an open question below.
+- **Authorized writer:** any wallet, but the proof in the payload must verify.
+- **Proof (v0, wallet addresses only):** the payload is the 65-byte `personal_sign` signature, made with the flagged address's own key, over `"Lookout dispute v0\ntarget: <targetHash>\nclaim: legit"` (`packages/core/src/owner-proof.ts`). The signer is recovered with plain ecrecover and must hash to the `targetHash`, AND must be the entity's `$creator`, so a published signature cannot be replayed by another wallet. It needs no network and no allowlist, so every indexer decides the same way. Contracts (no key) and domains (needs a DNS or file proof) cannot be disputed this way yet. The old placeholder allowlist (`registry.json` `attesters`) still works alongside it.
 - **Lifetime:** 30 days (1,296,000 blocks).
-- **Effect:** marks the target `disputed` and makes the panel service open a case. **It never clears a flag by itself.**
+- **Effect:** marks the target `disputed` and puts it in front of the operator, who may publish a `ruling`. **It never clears a flag by itself.**
 
 ### `lookout.v0.stake`
 
@@ -148,35 +151,20 @@ A deposit record. Mirrors the escrow contract, which is the source of truth for 
 - **Lifetime:** until resolved, plus 7 days. Set to a safe maximum, then `extendEntity` or let it lapse.
 - **Rule:** an indexer must cross-check `locked` against the escrow contract before counting it.
 
-### `lookout.v0.vote`
-
-A reviewer's hidden vote, then its reveal. Not `readonly`, because the reveal is a patch.
-
-| Column | Type | Idx | Notes |
-| --- | --- | --- | --- |
-| `caseId` | `str` | yes | |
-| `commitHash` | `str` | no | `keccak256("lookout.vote.v0:" caseId ":" outcome ":" salt ":" juror)`, set at creation (core/vote.ts) |
-| `outcome` | `str` optional | no | set at reveal with `patchEntity` |
-| `salt` | `str` optional | no | set at reveal |
-
-- **Authorized writer:** a reviewer drawn for that case.
-- **Lifetime:** end of round plus a grace period.
-- **Rule:** a reveal counts only if the commitment formula above, with `juror = $creator`, equals `commitHash`. Votes that are never revealed are ignored. Because a patch overwrites the entity, the `commitHash` attribute stays untouched and is the audit trail.
-
 ### `lookout.v0.ruling`
 
-The outcome of a reviewer case. Flag: `readonly`.
+The operator's public decision about a target. Flag: `readonly`.
 
 | Column | Type | Idx | Notes |
 | --- | --- | --- | --- |
 | `caseId` | `str` | yes | |
 | `targetHash` | `str` | yes | |
 | `outcome` | `str` | yes | `block` or `clear` |
-| `payload` | `bytes` optional | no | JSON: the draw `seed`, the `jurors`, `counts`, `winners`, `losers`, `nonReveal` (services/panel/src/settle.ts `rulingPayload`) |
+| `payload` | `bytes` optional | no | JSON `{"v":0,"by":"operator","reason":"...","at":<unix s>}`. The reason is required and public |
 
-- **Authorized writer:** the panel service wallet.
+- **Authorized writer:** the operator wallet.
 - **Lifetime:** 90 days (3,888,000 blocks).
-- **Effect:** overrides everything else in scoring. Anyone can recompute the tally from the revealed `vote` entities, so the panel service is not trusted blindly.
+- **Effect:** overrides everything else in scoring. It is one key, so it can be wrong, and the public reason is what keeps it accountable. This is a stated trust limit.
 
 ### `lookout.v0.reputation`
 
@@ -206,29 +194,15 @@ The fingerprint of one private lookup table. Clients check PIR answers against i
 - **Authorized writer:** a registered indexer.
 - **Lifetime:** keep the latest few. Several independent indexers publish a root for the same `snapshotId`, and a client accepts a table only if it matches one of them. The table itself (about 512 KB) is not on Arkiv.
 
-### `lookout.v0.bounty`
-
-The announcement of a stealth payout. Not a payment: the ETH moves on chain. Flag: `readonly`.
-
-| Column | Type | Idx | Notes |
-| --- | --- | --- | --- |
-| `reportId` | `str` | yes | found by clients over PIR, not by attribute query |
-| `amountTier` | `i32` | no | |
-| `payload` | `bytes` | no | the ephemeral public key (ERC-5564 style announcement). Format in `arkiv/stealth-format.md` (Dev B, Phase 0) |
-
-- **Authorized writer:** the payer wallet.
-- **Lifetime:** until claimed plus 30 days.
-
 ## Relationships
 
 ```
-report ──reportId──► stake      (money held in escrow)
-   │                  └──────────► bounty   (paid out when confirmed)
+report ──reportId──► stake      (money held in escrow, refunded or confirmed)
    └──targetHash──┐
 verdict ──targetHash──┼──► scoring ──► block / warn / unknown
 attestation ──targetHash──┘     ▲
    │                            │
-   └─ opens ► caseId ► vote(s) ► ruling ──┘  (a ruling overrides all)
+   └─ answered by ► ruling ──┘  (the operator's ruling overrides all)
 
 indexer: reads all of the above ► reputation (checkpoint), snapshot ► PIR servers ► client
 ```
@@ -241,12 +215,10 @@ Arkiv tells us who *created* an entity (`$creator`). It does not tell us they we
 | --- | --- | --- |
 | `report` | any wallet | its reputation and deposit decide its weight, not who it is |
 | `verdict` | a registered source | `$creator` is in the source registry for that `sourceType` |
-| `attestation` | any wallet | the proof of control in the payload must verify |
+| `attestation` | any wallet | the payload must be a valid owner signature (`packages/core/src/owner-proof.ts`), and the writer must be the signer |
 | `stake` | the escrow writer | `$creator` equals the configured escrow writer, and the amount matches escrow state |
-| `vote` | a drawn reviewer | `$creator` is in the juror list of that case |
-| `ruling` | the panel service | `$creator` equals the configured panel wallet |
+| `ruling` | the operator | `$creator` equals the configured operator wallet |
 | `reputation`, `snapshot` | a registered indexer | `$creator` is in the indexer registry |
-| `bounty` | the payer wallet | `$creator` equals the configured payer wallet |
 
 The registries are a small config file in the repo, and their addresses go in the README writer-wallet table that the Arkiv track requires. Opening them up beyond the team is future work, and we say so in the pitch.
 
@@ -290,7 +262,7 @@ The same filter as a raw query string: `targetKind = str('domain') AND category 
 
 ## Open questions
 
-Resolved by the docs: expiry units and extension, attribute types and limits, query syntax and pagination, vote reveal as a patch, and the chain for escrow (separate). What is left:
+Resolved by the docs: expiry units and extension, attribute types and limits, query syntax and pagination, and the chain for escrow (separate). What is left:
 
 1. **Domain ownership proof:** how does a domain owner prove control for an `attestation`? Options: a DNS TXT record, a signed file on the site, or an ENS name that points at the project. Contract and address owners can sign with the deployer key.
 2. **Meta-address encryption:** what is the `report` payload encrypted to, and who may read it? The PRD says encrypted but not to whom.
@@ -317,7 +289,7 @@ The docs were read through a summarising fetch tool, so the numbers were first t
 
 Two details the tests found that the docs did not make obvious: `MAX_LIFETIME` is a `bigint` (not a number), and a lifetime over the maximum is **not** rejected when you build it with `ExpirationTime`, only when it is sent. So our own tests must check every lifetime against the maximum, and they do.
 
-The nine schemas now exist in code in `packages/arkiv/src/schemas.ts`, with lifetimes and creation flags in `lifetimes.ts`. `packages/arkiv/src/schemas.test.ts` encodes this document's tables (which columns are indexed, which are optional, the lifetimes in blocks, the creation flags), so the document and the code cannot drift apart silently. ### Verified on the live Rabdi testnet (2026-11-06)
+The seven schemas now exist in code in `packages/arkiv/src/schemas.ts`, with lifetimes and creation flags in `lifetimes.ts`. `packages/arkiv/src/schemas.test.ts` encodes this document's tables (which columns are indexed, which are optional, the lifetimes in blocks, the creation flags), so the document and the code cannot drift apart silently. ### Verified on the live Rabdi testnet (2026-11-06)
 
 `npm run arkiv:smoke` (script `scripts/arkiv-smoke.mjs`) wrote and read a real entity with the throwaway test wallet:
 

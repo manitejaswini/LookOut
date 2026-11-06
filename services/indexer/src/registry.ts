@@ -11,7 +11,7 @@ import { readFileSync } from 'node:fs';
  *               from anyone else is ignored.
  * - indexers:   wallets allowed to publish `snapshot` roots, each tied to ONE indexerId. A client trusts a table only if
  *               its root was published by one of these (arkiv/snapshot-format.md, "Publishing on Arkiv").
- * - panel:      the one wallet whose rulings count. null means no rulings are honoured.
+ * - operator:      the one wallet whose rulings count. null means no rulings are honoured.
  * - reputation: the reputation checkpoint, address -> score. Unknown wallets are 0, so a fresh wallet weighs 0.
  *               All indexers must use the same checkpoint or their snapshot roots will differ.
  */
@@ -30,7 +30,7 @@ export interface Registry {
   sources: RegistrySource[];
   indexers: RegistryIndexer[];
   attesters: string[]; // lowercase
-  panel: string | null; // lowercase
+  operator: string | null; // lowercase
   reputation: Record<string, number>; // lowercase address -> score
 }
 
@@ -69,14 +69,14 @@ export function parseRegistry(input: unknown): Registry {
   });
 
   const attesters = (Array.isArray(j.attesters) ? j.attesters : []).map((a, i) => address(`attesters[${i}]`, a));
-  const panel = j.panel == null ? null : address('panel', j.panel);
+  const operator = j.operator == null ? null : address('operator', j.operator);
 
   const reputation: Record<string, number> = {};
   for (const [a, score] of Object.entries((j.reputation ?? {}) as Record<string, unknown>)) {
     if (typeof score !== 'number' || !Number.isFinite(score) || score < 0) throw new Error(`registry: reputation for ${a} must be a number >= 0`);
     reputation[address('reputation key', a)] = score;
   }
-  return { sources, indexers, attesters, panel, reputation };
+  return { sources, indexers, attesters, operator, reputation };
 }
 
 export function loadRegistry(path: string | URL = new URL('../registry.json', import.meta.url)): Registry {

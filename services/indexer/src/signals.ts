@@ -1,4 +1,4 @@
-import { reportWeight, type ScoringInput, type Signal } from '@lookout/core';
+import { reportWeight, verifyOwnerProof, type ScoringInput, type Signal } from '@lookout/core';
 import { findSource, reputationOf, sourceIdx, type Registry } from './registry.ts';
 import type { BlockTiming, StoredEntity } from './types.ts';
 
@@ -36,7 +36,7 @@ export type DropReason =
   | 'untrusted verdict writer'
   | 'bad verdict fields'
   | 'attester not recognised'
-  | 'ruling not from the panel'
+  | 'ruling not from the operator'
   | 'bad ruling outcome'
   | 'superseded ruling';
 
@@ -87,11 +87,14 @@ export function buildTargets(
         weight: 1, createdBlock: e.createdBlock, note: reason ?? '', hasProof: !!proofHash && HEX32.test(proofHash),
       });
     } else if (e.kind === 'attestation') {
-      // placeholder rule until proof of control is designed: only allowlisted wallets can dispute
-      if (!registry.attesters.includes(e.creator)) { drop('attester not recognised'); continue; }
+      // A dispute counts if its writer is allowlisted, OR it carries a valid owner proof: a signature made with the flagged
+      // address's own key (core/owner-proof.ts). The proof is pure maths, so every indexer decides the same way.
+      const allowlisted = registry.attesters.includes(e.creator);
+      const proved = e.attrs.claim === 'legit' && verifyOwnerProof({ targetHash: hash, creator: e.creator }, e.attrs.payload).ok;
+      if (!allowlisted && !proved) { drop('attester not recognised'); continue; }
       if (e.attrs.claim === 'legit') view(hash).disputed = true;
     } else if (e.kind === 'ruling') {
-      if (registry.panel === null || e.creator !== registry.panel) { drop('ruling not from the panel'); continue; }
+      if (registry.operator === null || e.creator !== registry.operator) { drop('ruling not from the operator'); continue; }
       const outcome = e.attrs.outcome;
       if (outcome !== 'block' && outcome !== 'clear') { drop('bad ruling outcome'); continue; }
       const t = view(hash);

@@ -1,5 +1,5 @@
 import { addr, dec, u256 } from '@arkiv-network/sdk/schema';
-import { verifyReveal, VOTE_OUTCOMES, type VoteOutcome } from '@lookout/core';
+import type { OutcomeKind } from './kinds.ts';
 import type { TargetKind } from '@lookout/core';
 import { CREATION_FLAGS, LIFETIMES } from './lifetimes.ts';
 import { ENUMS } from './kinds.ts';
@@ -8,15 +8,14 @@ import { defined, HEX32, oneOf, result, type EntityWriter, type WriteResult } fr
 import { normalizeTarget, targetHash } from '@lookout/core';
 
 /**
- * Writers for the trust layer: stake, vote, ruling, reputation and bounty.
+ * Writers for the trust layer: stake, ruling and reputation.
  * Same rules as writers.ts: every input is checked BEFORE anything is sent, and none of these hold a key.
  *
  * Who may write each kind is NOT enforced here. Anyone can write to Arkiv. Indexers enforce it by checking `$creator`
- * (arkiv/schema.md, "Trusted writers"): `stake` only from the escrow writer, `ruling` only from the panel wallet, `vote`
- * only from a juror drawn for the case, `reputation` only from a registered indexer, `bounty` only from the payer wallet.
+ * (arkiv/schema.md, "Trusted writers"): `stake` only from the escrow writer, `ruling` only from the operator wallet, `reputation` only from a registered indexer.
  */
 
-/** `stake` status and `vote` reveals are patches, so these writers also need `patchEntity`. */
+/** A `stake` status change is a patch, so these writers also need `patchEntity`. */
 export interface TrustWriter extends EntityWriter {
   patchEntity(schema: unknown, entityKey: string, args: { set: Record<string, unknown> }): Promise<unknown>;
 }
@@ -61,51 +60,14 @@ export async function setStakeStatus(client: TrustWriter, input: { entityKey: st
   await client.patchEntity(SCHEMAS.stake, input.entityKey, { set: { status: input.to } });
 }
 
-/* ---------- vote: hidden, then revealed ---------- */
-
-/** The commit round. Only the commitment is published, so nobody can read or copy the vote. */
-export async function createVote(client: EntityWriter, input: { caseId: string; commitHash: string }): Promise<WriteResult> {
-  need(CASE_ID.test(input.caseId), 'caseId must be 16 lowercase hex digits');
-  need(HEX32.test(input.commitHash), 'commitHash must be 0x followed by 64 lowercase hex digits');
-  const out = await client.createEntity(
-    SCHEMAS.vote,
-    { caseId: input.caseId, commitHash: input.commitHash },
-    { expiration: LIFETIMES.vote(), flags: CREATION_FLAGS.vote },
-  );
-  return result(out);
-}
-
-export interface RevealInput {
-  entityKey: string;
-  caseId: string;
-  /** the juror's wallet, bound into the commitment */
-  juror: string;
-  outcome: VoteOutcome;
-  salt: string;
-  /** the commitment already published for this vote */
-  commitHash: string;
-}
-
-/**
- * The reveal round. The reveal is checked against the commitment HERE first, so a wrong or tampered reveal is never
- * published. The panel service checks it again before it counts the vote, because anyone can write to Arkiv.
- */
-export async function revealVote(client: TrustWriter, input: RevealInput): Promise<void> {
-  need(ENTITY_KEY.test(input.entityKey), 'entityKey must be 0x + 64 hex');
-  oneOf('outcome', input.outcome, VOTE_OUTCOMES);
-  need(verifyReveal(input.commitHash, { caseId: input.caseId, outcome: input.outcome, salt: input.salt, juror: input.juror }),
-    'this reveal does not match the commitment, it would be ignored');
-  await client.patchEntity(SCHEMAS.vote, input.entityKey, { set: { outcome: input.outcome, salt: input.salt } });
-}
-
 /* ---------- ruling: the outcome of a case ---------- */
 
 export interface RulingInput {
   caseId: string;
   kind: TargetKind;
   value: string;
-  outcome: VoteOutcome;
-  /** the juror list, the tally and the seed used to draw them, so anyone can re-check the ruling */
+  outcome: OutcomeKind;
+  /** the operator's reasons, so anyone can see why */
   payload?: Uint8Array;
 }
 
@@ -157,38 +119,4 @@ export async function publishReputationCheckpoint(
     written++;
   }
   return { written, skipped };
-}
-
-/* ---------- bounty: the announcement of a stealth payout ---------- */
-
-export interface BountyInput {
-  reportId: string;
-  /** a tier, not the exact amount: 0 to 255 */
-  amountTier: number;
-  /** the ephemeral public key R, compressed: 33 bytes, as bytes or as hex */
-  ephemeralPublicKey: Uint8Array | string;
-}
-
-function compressedKey(k: Uint8Array | string): Uint8Array {
-  let bytes: Uint8Array;
-  if (typeof k === 'string') {
-    need(/^(0x)?[0-9a-fA-F]{66}$/.test(k), 'ephemeralPublicKey must be 33 bytes (66 hex digits)');
-    const h = k.replace(/^0x/, '');
-    bytes = Uint8Array.from(h.match(/../g)!.map((x) => parseInt(x, 16)));
-  } else bytes = k;
-  need(bytes.length === 33, 'ephemeralPublicKey must be 33 bytes');
-  need(bytes[0] === 0x02 || bytes[0] === 0x03, 'ephemeralPublicKey must be a compressed secp256k1 key (starts 02 or 03)');
-  return bytes;
-}
-
-/** The payload is a public key, so it is safe in plaintext. There is no view tag and nothing else (arkiv/stealth-format.md). */
-export async function createBounty(client: EntityWriter, input: BountyInput): Promise<WriteResult> {
-  need(REPORT_ID.test(input.reportId), 'reportId must be 32 lowercase hex digits');
-  need(Number.isInteger(input.amountTier) && input.amountTier >= 0 && input.amountTier <= 255, 'amountTier must be an integer from 0 to 255');
-  const out = await client.createEntity(
-    SCHEMAS.bounty,
-    { reportId: input.reportId, amountTier: input.amountTier, payload: compressedKey(input.ephemeralPublicKey) },
-    { expiration: LIFETIMES.bounty(), flags: CREATION_FLAGS.bounty },
-  );
-  return result(out);
 }

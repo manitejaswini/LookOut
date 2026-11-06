@@ -5,6 +5,7 @@
 // Writes one of each: stake (then patches its status), vote (then reveals it by patching), ruling, reputation, bounty.
 // Everything is about the reserved `lookout-trust-smoke.example` domain and fake ids, and expires on its own.
 // It never prints a key. The indexer ignores all of it (the test wallet is not the escrow writer, panel or a juror).
+import './safe-errors.mjs';
 
 import { existsSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';

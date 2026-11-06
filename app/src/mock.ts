@@ -50,7 +50,7 @@ export const TARGETS: Target[] = [
     disputed: false,
     ruling: 'block',
     signals: [
-      sig('ark_rl_0c44', 'ruling', 'panel-case-17', 'block', 1, 86400, 'Panel ruled 4 to 1: scam'),
+      sig('ark_rl_0c44', 'ruling', 'panel-case-17', 'block', 1, 86400, 'Operator ruling: confirmed scam'),
       sig('ark_vd_a2e5', 'checker', 'lookout-checker', 'block', 1, 90000, 'Matches drainer bytecode'),
     ],
   },
@@ -85,8 +85,8 @@ export const FLOW = [
   ['Verdicts', 'Open feeds, our checker and other verifiers post signed verdict entities, each tagged with a source type.'],
   ['Index', 'Indexers read Arkiv, build a bucketed lookup table and publish its root hash as a snapshot entity.'],
   ['Check', 'Before signing, the wallet runs a private 2-server PIR lookup and verifies the answer against the Arkiv root.'],
-  ['Dispute', 'The real owner posts an attestation from the deployer or ENS wallet. A blocking flag becomes a reviewer case.'],
-  ['Settle', 'Staked, random reviewers vote hidden-then-reveal. Correct reporters get a stealth bounty. Wrong ones lose the deposit.'],
+  ['Dispute', 'The real owner signs with the flagged address and posts an attestation. It marks the flag disputed, and only a public operator ruling can overturn it.'],
+  ['Settle', 'A trusted source corroborates the report: the reporter gets the deposit back, a reputation gain and (if a verified human) a bounty, all claimable from the escrow. No corroboration: the deposit is refunded. Only an operator ruling can forfeit it.'],
 ];
 
 const now = Date.now();

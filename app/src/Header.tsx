@@ -12,10 +12,10 @@ const NAV: [string, string][] = [
   ['/#how', 'How it works'],
   ['/pay', 'Pay'],
   ['/report', 'Report'],
-  ['/reviewer', 'Join panel'],
-  ['/vote', 'Vote'],
+  ['/dispute', 'Dispute'],
+  ['/verify', 'Verify'],
+  ['/funds', 'Funds'],
   ['/pitch/arkiv', 'Arkiv pitch'],
-  ['/pitch/ef', 'EF pitch'],
   ['/pitch/worldid', 'World ID pitch'],
 ];
 

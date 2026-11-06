@@ -2,10 +2,10 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { commitVote, targetHash } from '@lookout/core';
+import { targetHash } from '@lookout/core';
 import { SCHEMAS } from './schemas.ts';
 import {
-  createBounty, createReputation, createRuling, createStake, createVote, publishReputationCheckpoint, revealVote, setStakeStatus,
+  createReputation, createRuling, createStake, publishReputationCheckpoint, setStakeStatus,
   type TrustWriter,
 } from './trust-writers.ts';
 
@@ -35,7 +35,6 @@ const CASE_ID = '0123456789abcdef';
 const TX = `0x${'12'.repeat(32)}`;
 const KEY = `0x${'ef'.repeat(32)}`;
 const JUROR = '0x37324a0cc17959ee99233c8552e741519983573e';
-const SALT = 'ab'.repeat(16);
 
 /* ---------- stake ---------- */
 
@@ -74,41 +73,6 @@ test('setStakeStatus patches a locked stake to returned or slashed, and nothing 
   await assert.rejects(setStakeStatus(client, { entityKey: KEY, from: 'locked', to: 'locked' as never }), /status/);
   await assert.rejects(setStakeStatus(client, { entityKey: '0x12', from: 'locked', to: 'returned' }), /entityKey/);
   assert.equal(calls.length, 2, 'the refused ones never reached the client');
-});
-
-/* ---------- vote ---------- */
-
-test('createVote publishes ONLY the commitment: no outcome and no salt', async () => {
-  const { client, calls } = fake();
-  const commitHash = commitVote({ caseId: CASE_ID, outcome: 'block', salt: SALT, juror: JUROR });
-  await createVote(client, { caseId: CASE_ID, commitHash });
-  const { schema, values, options } = created(calls);
-  assert.equal(schema, SCHEMAS.vote);
-  assert.deepEqual(values, { caseId: CASE_ID, commitHash });
-  assert.equal(options.flags.readonly, undefined, 'a vote is patched at reveal');
-  assert.equal(blocks(options.expiration), 302_400n);
-  await assert.rejects(createVote(client, { caseId: 'zz', commitHash }), /caseId/);
-  await assert.rejects(createVote(client, { caseId: CASE_ID, commitHash: '0xABC' }), /commitHash/);
-});
-
-test('revealVote patches outcome and salt only when they match the commitment', async () => {
-  const { client, calls } = fake();
-  const commitHash = commitVote({ caseId: CASE_ID, outcome: 'clear', salt: SALT, juror: JUROR });
-  await revealVote(client, { entityKey: KEY, caseId: CASE_ID, juror: JUROR, outcome: 'clear', salt: SALT, commitHash });
-  assert.deepEqual((calls[0].args[2] as { set: unknown }).set, { outcome: 'clear', salt: SALT });
-  assert.equal(calls[0].args[0], SCHEMAS.vote);
-});
-
-test('a reveal that changes the vote, the salt, the juror or the case is refused locally and never published', async () => {
-  const { client, calls } = fake();
-  const commitHash = commitVote({ caseId: CASE_ID, outcome: 'clear', salt: SALT, juror: JUROR });
-  const base = { entityKey: KEY, caseId: CASE_ID, juror: JUROR, outcome: 'clear' as const, salt: SALT, commitHash };
-  await assert.rejects(revealVote(client, { ...base, outcome: 'block' }), /does not match the commitment/);
-  await assert.rejects(revealVote(client, { ...base, salt: 'cd'.repeat(16) }), /does not match/);
-  await assert.rejects(revealVote(client, { ...base, juror: '0x5fd9a1e4b7c3920b6a8e1d04c7f23b9a6e5d1c08' }), /does not match/);
-  await assert.rejects(revealVote(client, { ...base, caseId: 'fedcba9876543210' }), /does not match/);
-  await assert.rejects(revealVote(client, { ...base, outcome: 'maybe' as never }), /outcome/);
-  assert.equal(calls.length, 0);
 });
 
 /* ---------- ruling ---------- */
@@ -169,35 +133,4 @@ test('publishReputationCheckpoint writes the non-zero scores in a stable order a
   const out = await publishReputationCheckpoint(client, 'rep-001', new Map([[w3, 5], [w1, 10], [w2, 0]]));
   assert.deepEqual(out, { written: 2, skipped: 1 });
   assert.deepEqual(calls.map((c) => plain((c.args[1] as { wallet: unknown }).wallet)), [w1, w3]);
-});
-
-/* ---------- bounty ---------- */
-
-test('createBounty writes the 33-byte compressed key as the only payload, readonly, with a 60 day lifetime', async () => {
-  const { client, calls } = fake();
-  const R = `02${'ab'.repeat(32)}`;
-  await createBounty(client, { reportId: REPORT_ID, amountTier: 3, ephemeralPublicKey: `0x${R}` });
-  const { schema, values, options } = created(calls);
-  assert.equal(schema, SCHEMAS.bounty);
-  assert.equal(values.amountTier, 3);
-  assert.equal((values.payload as Uint8Array).length, 33);
-  assert.equal((values.payload as Uint8Array)[0], 0x02);
-  assert.equal(options.flags.readonly, true);
-  assert.equal(blocks(options.expiration), 2_592_000n);
-  // bytes work the same as hex
-  await createBounty(client, { reportId: REPORT_ID, amountTier: 0, ephemeralPublicKey: Uint8Array.from(R.match(/../g)!.map((h) => parseInt(h, 16))) });
-  assert.equal(calls.length, 2);
-});
-
-test('createBounty refuses anything that is not a compressed key, a tier outside 0 to 255, or a bad report id', async () => {
-  const { client, calls } = fake();
-  const good = `03${'cd'.repeat(32)}`;
-  await assert.rejects(createBounty(client, { reportId: REPORT_ID, amountTier: 1, ephemeralPublicKey: `04${'cd'.repeat(32)}` }), /compressed/);
-  await assert.rejects(createBounty(client, { reportId: REPORT_ID, amountTier: 1, ephemeralPublicKey: '0x1234' }), /33 bytes/);
-  await assert.rejects(createBounty(client, { reportId: REPORT_ID, amountTier: 1, ephemeralPublicKey: new Uint8Array(32) }), /33 bytes/);
-  await assert.rejects(createBounty(client, { reportId: REPORT_ID, amountTier: 256, ephemeralPublicKey: good }), /amountTier/);
-  await assert.rejects(createBounty(client, { reportId: REPORT_ID, amountTier: -1, ephemeralPublicKey: good }), /amountTier/);
-  await assert.rejects(createBounty(client, { reportId: REPORT_ID, amountTier: 1.5, ephemeralPublicKey: good }), /amountTier/);
-  await assert.rejects(createBounty(client, { reportId: 'nope', amountTier: 1, ephemeralPublicKey: good }), /reportId/);
-  assert.equal(calls.length, 0);
 });

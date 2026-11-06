@@ -15,6 +15,7 @@ import type { WorldIdConfig } from './config.ts';
  */
 
 export type WorldIdErrorCode =
+  | 'wallet_not_proven'
   | 'bad_payload'
   | 'bad_wallet'
   | 'wrong_environment'
@@ -27,6 +28,7 @@ export type WorldIdErrorCode =
   | 'verifier_unreachable';
 
 const STATUS: Record<WorldIdErrorCode, number> = {
+  wallet_not_proven: 400,
   bad_payload: 400,
   bad_wallet: 400,
   wrong_environment: 400,

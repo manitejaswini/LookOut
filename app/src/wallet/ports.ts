@@ -1,11 +1,13 @@
 import { createWalletClient as createArkivWalletClient } from '@arkiv-network/sdk';
 import { createPublicClient, createWalletClient, custom, http, parseEther, type PublicClient } from 'viem';
-import { createReport, createVote, newReportId, revealVote, type EntityWriter, type TrustWriter } from '@lookout/arkiv';
-import { CONFIG } from '@lookout/core';
+import { createAttestation, createReport, newReportId, type EntityWriter } from '@lookout/arkiv';
+import { CONFIG, encodeReportPayload } from '@lookout/core';
+import { rememberReport } from './reports-store';
 import { createEscrow } from '@lookout/escrow';
+import type { DisputePorts } from '../flows/dispute-flow';
+import type { FundsPorts } from '../flows/funds-flow';
 import type { PaymentRecord, SendPorts } from '../flows/pay-flow';
 import type { ReportPorts } from '../flows/report-flow';
-import type { VotePorts, VoteStorage } from '../flows/vote-flow';
 import { ARKIV_CHAIN, ESCROW_ADDRESS, ESCROW_CHAIN, escrowConfigured } from './chains';
 import type { WalletState } from './WalletProvider';
 
@@ -37,21 +39,12 @@ export function reportPorts(w: WalletState): ReportPorts {
     switchChain: (name) => w.switchChain(name),
     deposit: async (reportId) => ({ hash: (await escrowFor(w).lockDeposit(reportId)).hash }),
     post: async (input) => {
-      const out = await createReport(arkivClient(w) as unknown as EntityWriter, input);
+      // the payload carries the plain target, so the operator can act on the report (the entity itself only has its hash)
+      const payload = encodeReportPayload({ kind: input.kind, value: input.value });
+      const out = await createReport(arkivClient(w) as unknown as EntityWriter, { kind: input.kind, value: input.value, category: input.category, reportId: input.reportId, payload });
+      rememberReport({ reportId: input.reportId, kind: input.kind, value: input.value, at: Math.floor(Date.now() / 1000) });
       return { entityKey: out.entityKey, expiresAt: String(out.expiresAt) };
     },
-  };
-}
-
-export function browserStorage(): VoteStorage {
-  return { get: (k) => window.localStorage.getItem(k), set: (k, v) => window.localStorage.setItem(k, v) };
-}
-
-export function votePorts(w: WalletState): VotePorts {
-  return {
-    storage: browserStorage(),
-    createVote: async (i) => ({ entityKey: (await createVote(arkivClient(w) as unknown as EntityWriter, i)).entityKey }),
-    revealVote: (i) => revealVote(arkivClient(w) as unknown as TrustWriter, i),
   };
 }
 
@@ -91,4 +84,34 @@ export function payPorts(w: WalletState): SendPorts {
 
 export async function ethBalance(address: `0x${string}`): Promise<bigint> {
   return createPublicClient({ chain: ESCROW_CHAIN, transport: http() }).getBalance({ address });
+}
+
+/* ---------------------------------- disputes ---------------------------------- */
+
+/** The owner signs with the wallet (personal_sign), then the dispute is written to Arkiv from the same wallet. */
+export function disputePorts(w: WalletState): DisputePorts {
+  return {
+    connected: () => w.address,
+    sign: (message) => createWalletClient({ chain: ESCROW_CHAIN, transport: custom(w.provider()), account: needAddress(w) }).signMessage({ message }),
+    switchChain: () => w.switchChain('arkiv'),
+    post: async ({ target, signature }) => {
+      const bytes = Uint8Array.from((signature.slice(2).match(/../g) ?? []).map((h) => parseInt(h, 16)));
+      const out = await createAttestation(arkivClient(w) as unknown as EntityWriter, { kind: 'address', value: target, claim: 'legit', payload: bytes });
+      return { entityKey: out.entityKey };
+    },
+  };
+}
+
+/* ----------------------------------- funds ----------------------------------- */
+
+/** Reads what the escrow holds for this wallet. Reads need no signature. */
+export function fundsPorts(): FundsPorts {
+  const publicClient = createPublicClient({ chain: ESCROW_CHAIN, transport: http() }) as PublicClient;
+  const escrow = createEscrow({ address: ESCROW_ADDRESS as `0x${string}`, publicClient });
+  return {
+    claimable: (a) => escrow.claimable(a),
+    deposit: (a, id) => escrow.deposit(a, id),
+    resolveWindow: async () => (await escrow.config()).resolveWindow,
+    now: () => Math.floor(Date.now() / 1000),
+  };
 }

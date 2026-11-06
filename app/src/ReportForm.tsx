@@ -8,7 +8,7 @@ import { DEPOSIT_ETH_LABEL, reportPorts } from './wallet/ports';
 import { short, useWallet } from './wallet/WalletProvider';
 
 /**
- * File a report: lock the deposit, then post the report. The deposit is returned if the panel confirms the report, goes to the
+ * File a report: lock the deposit, then post the report. The deposit is returned if a trusted source corroborates the report (and is refunded if none does), goes to the
  * bounty pool if it is rejected, and can be reclaimed if nobody rules. Reports from fresh wallets can only warn, they never block.
  */
 
@@ -76,7 +76,7 @@ export default function ReportForm({ initialKind, initialValue }: { initialKind?
 
       {blocked && <p className="tiny">{blocked}</p>}
       <p className="tiny">
-        The deposit is held in escrow, not paid to anyone. It comes back if the panel confirms the report, it goes to the bounty pool if the report is
+        The deposit is held in escrow, not paid to anyone. It comes back whatever happens, unless the operator rules the report false: it is returned with a bounty if a trusted source corroborates the report, and refunded without one if none does. It goes to the bounty pool only if the report is
         rejected, and you can reclaim it yourself if nobody rules in time. A new wallet’s report can only warn, it cannot block a site on its own.
       </p>
 

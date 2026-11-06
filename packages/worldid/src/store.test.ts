@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { SqliteSeatStore } from './store.ts';
 import { WALLET_A, WALLET_B } from './fixtures.ts';
 
-const ACTION = 'lookout-reviewer-seat-v1';
+const ACTION = 'lookout-verified-human-v1';
 const H1 = 'nil_' + '1'.repeat(64);
 const H2 = 'nil_' + '2'.repeat(64);
 const WALLET_C = '0x1111111111111111111111111111111111111111';

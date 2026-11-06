@@ -24,11 +24,10 @@ const balance = await publicClient.getBalance({ address: account.address });
 console.log(`deployer ${account.address} has ${balance} wei on Sepolia; resolver will be ${resolver}`);
 if (balance < parseEther('0.01')) { console.error('Not enough Sepolia ETH to deploy. Fund the deployer and run again.'); process.exit(1); }
 
-// amounts come from CONFIG (one source of truth). 14 day unstake delay (longer than a 7 day case), 30 day reclaim window
+// amounts come from CONFIG (one source of truth). a 30 day window after which a reporter can reclaim a deposit nobody settled
 const out = await deployEscrow({
   publicClient, walletClient, resolver,
-  depositWei: parseEther(String(CONFIG.DEPOSIT_ETH)), bountyWei: parseEther(String(CONFIG.BOUNTY_ETH)), minReviewerStake: parseEther(String(CONFIG.REVIEWER_STAKE_ETH)),
-  unstakeDelay: 14n * 86_400n, resolveWindow: 30n * 86_400n,
+  depositWei: parseEther(String(CONFIG.DEPOSIT_ETH)), bountyWei: parseEther(String(CONFIG.BOUNTY_ETH)), resolveWindow: 30n * 86_400n,
 });
 console.log(`LookoutEscrow deployed at ${out.address} (tx ${out.hash}, block ${out.blockNumber})`);
 console.log('Put it in .env as ESCROW_ADDRESS, and the block number as ESCROW_DEPLOY_BLOCK. The contract is not verified on Etherscan until you do that yourself.');

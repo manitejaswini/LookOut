@@ -3,7 +3,7 @@ import PixelCanvas from './PixelCanvas';
 import * as P from './pitch-data';
 import { WORLDID } from './pitch-worldid';
 
-export type Track = 'arkiv' | 'ef' | 'worldid';
+export type Track = 'arkiv' | 'worldid';
 export interface SlideDef { id: string; render: (active: boolean) => ReactNode; cover?: boolean }
 
 /* ---------- shared building blocks ---------- */
@@ -90,79 +90,6 @@ function WorkflowSlide({ intro, steps, notes }: { intro: string; steps: P.Step[]
   );
 }
 
-function CropsSlide({ step, mark, name, statement, points, limit }: { step: number; mark: string; name: string; statement: string; points: string[]; limit: string }) {
-  return (
-    <>
-      <p className="mono-label">{`0${step + 2 + (step === 4 ? 1 : 0)} · CROPS · ${step} of 4`}</p>
-      <div className="crops">
-        <div className="crops-mark" aria-hidden="true">{mark}</div>
-        <div className="crops-body">
-          <h2 className="s-title">{name}</h2>
-          <p className="crops-statement">{statement}</p>
-          <ul className="crops-points">
-            {points.map((t) => <li key={t}>{t}</li>)}
-          </ul>
-          <div className="crops-limit">
-            <span className="mono-label">Honest limit</span>
-            <p>{limit}</p>
-          </div>
-        </div>
-      </div>
-    </>
-  );
-}
-
-const PIR_A = '101100100110101001101100';
-const PIR_FLIP = 9;
-const pirBits = (flip: boolean) =>
-  PIR_A.split('').map((c, i) => (flip && i === PIR_FLIP ? (c === '1' ? '0' : '1') : c));
-
-function PirRow({ label, flip }: { label: string; flip: boolean }) {
-  return (
-    <div className="pir-row">
-      <span className="mono-label">{label}</span>
-      <div className="pir-bits" aria-hidden="true">
-        {pirBits(flip).map((b, i) => (
-          <span key={i} className={`${b === '1' ? 'on' : ''} ${i === PIR_FLIP ? 'flip' : ''}`} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function PirSlide() {
-  return (
-    <>
-      <Title label="06 · Privacy explained">How PIR works.</Title>
-      <p className="s-lede">Ask two servers for one record. Neither learns which one.</p>
-      <div className="pir">
-        <div className="pir-step">
-          <span className="mono-label">01 · Client</span>
-          <h3>Picks a random vector</h3>
-          <p>One bit per bucket. It wants bucket <b>i</b>.</p>
-        </div>
-        <span className="pir-arrow" aria-hidden="true">→</span>
-        <div className="pir-step pir-servers">
-          <span className="mono-label">02 · Two servers</span>
-          <PirRow label="Server A gets r" flip={false} />
-          <PirRow label="Server B gets r, bit i flipped" flip />
-          <p>Each sends back the XOR of the buckets its vector selects.</p>
-        </div>
-        <span className="pir-arrow" aria-hidden="true">→</span>
-        <div className="pir-step">
-          <span className="mono-label">03 · Client</span>
-          <h3>XORs the answers</h3>
-          <p>Everything cancels except bucket <b>i</b>. Then it checks the bucket against the root on Arkiv.</p>
-        </div>
-      </div>
-      <div className="wf-notes">
-        <p>Each server sees one random-looking string, never the target. We always fetch two candidate buckets, so a hit and a miss look the same.</p>
-        <p>Honest limit: the two servers must not collude, and they still see your IP address.</p>
-      </div>
-    </>
-  );
-}
-
 function Banner({ line, sub, small }: { line: string; sub: string; small: string }) {
   return (
     <div className="banner">
@@ -237,49 +164,6 @@ const ARKIV_SLIDES: SlideDef[] = [
   },
 ];
 
-/* ---------- EF deck ---------- */
-
-const E = P.EF;
-
-const EF_SLIDES: SlideDef[] = [
-  {
-    id: 'e-cover', cover: true,
-    render: (active) => <Cover {...E.cover} active={active} wave="wave" />,
-  },
-  { id: 'e-problem', render: () => <ProblemSlide title={E.problemTitle} problems={E.problems} /> },
-  {
-    id: 'e-workflow',
-    render: () => <WorkflowSlide intro={E.intro} steps={E.workflow} notes={E.notes} />,
-  },
-  ...E.cropsSlides.flatMap(([mark, name, statement, points, limit], n): SlideDef[] => {
-    const slide: SlideDef = {
-      id: `e-crops-${mark}`,
-      render: () => <CropsSlide step={n + 1} mark={mark} name={name} statement={statement} points={points} limit={limit} />,
-    };
-    // the PIR explainer sits right after the Privacy slide
-    return mark === 'P' ? [slide, { id: 'e-pir', render: () => <PirSlide /> }] : [slide];
-  }),
-  {
-    id: 'e-stack',
-    render: () => (
-      <>
-        <Title label="08 · Privacy stack">{E.stackTitle}</Title>
-        <div className="cols2 even">
-          <div>
-            <p className="mono-label">The privacy stack, including Anon-RPC</p>
-            <Rows items={E.stack} />
-          </div>
-          <div>
-            <p className="mono-label">In the 3-minute demo</p>
-            <Rows items={E.demo} />
-          </div>
-        </div>
-        <Banner line={E.line} sub={E.lineSub} small={E.limits} />
-      </>
-    ),
-  },
-];
-
 /* ---------- WORLD ID deck ---------- */
 
 const W = WORLDID;
@@ -330,14 +214,14 @@ const WORLD_SLIDES: SlideDef[] = [
     render: () => (
       <>
         <Title label="03 · The flow">{W.flowTitle}</Title>
-        <div className="workflow" aria-label="Reviewer enrollment flow">
+        <div className="workflow" aria-label="Human verification flow">
           {W.flow.map(([title, caption], n) => (
             <div key={title} className="wf-step">
-              <div className={`wf-node ${n === 1 ? 't-ef' : ''}`}>
+              <div className={`wf-node ${n === 2 ? 't-ef' : ''}`}>
                 <span className="mono-label">0{n + 1}</span>
                 <h3>{title}</h3>
                 <p>{caption}</p>
-                {n === 1 && <span className="tag">World ID</span>}
+                {n === 2 && <span className="tag">World ID</span>}
               </div>
               {n < W.flow.length - 1 && <span className="wf-arrow" aria-hidden="true">→</span>}
             </div>
@@ -374,6 +258,5 @@ const WORLD_SLIDES: SlideDef[] = [
 
 export const SLIDE_SETS: Record<Track, { name: string; slides: SlideDef[] }> = {
   arkiv: { name: 'LOOKOUT · ARKIV', slides: ARKIV_SLIDES },
-  ef: { name: 'LOOKOUT · EF', slides: EF_SLIDES },
   worldid: { name: 'LOOKOUT · WORLD ID', slides: WORLD_SLIDES },
 };

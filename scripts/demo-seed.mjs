@@ -9,6 +9,7 @@
 //
 // It uses the throwaway test wallet in .env, which is the registered `lookout-checker` and `openfeed-demo` source
 // in services/indexer/registry.json. Nothing is printed that is secret.
+import './safe-errors.mjs';
 
 import { existsSync } from 'node:fs';
 import { eq } from '@arkiv-network/sdk/query';
