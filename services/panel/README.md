@@ -21,6 +21,12 @@ What decides disputed reports and moves the money. The rules live in `@lookout/c
 - Nothing yet OPENS cases from real reports: the ruling writer needs the target's plaintext (kind and value), and a report entity only carries its hash. Decide where the plaintext comes from (the disputer supplies it, or the report payload) before wiring this.
 - A service entry point that runs `tick()`, the mirror and the checkpoint job on a timer is not written.
 
-## Not yet run live
+## What has run live
 
-Everything here is tested against fakes for Arkiv and a real local EVM (anvil) for escrow. Nothing has been run against the live Arkiv testnet or a deployed Sepolia escrow. `npm run escrow:deploy` does the deployment once a funded key is in `.env`.
+`npm run panel:live` (Arkiv Rabdi plus the deployed Sepolia escrow) passed on 2026-11-07: the Arkiv block and vote readers, a reputation checkpoint published by the job and read back by the indexer's own reader and rules, the stake mirror driven by the real escrow deposit events, and the round driver end to end on real blocks (seed block, draw, commit, reveal, ruling, seed re-verified from the chain). `npm run escrow:smoke` does a real deposit, confirm and claim on Sepolia, and `npm run arkiv:trust-smoke` writes every trust entity kind.
+
+## Still not run live
+
+- Settlement against live Arkiv AND the live escrow together. Each half is proven separately (settlement on a local EVM, rulings on Arkiv), and the one wallet here is both reporter and juror candidate, so the exclusion rules block a single-wallet run.
+- The browser wallet path (`app/src/wallet/ports.ts`), in particular the Arkiv SDK signing through a browser account.
+- More than one juror, and the World ID seat pool feeding candidates.

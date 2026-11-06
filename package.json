@@ -25,6 +25,7 @@
     "demo:seed": "node scripts/demo-seed.mjs",
     "arkiv:trust-smoke": "node scripts/arkiv-trust-smoke.mjs",
     "escrow:deploy": "node scripts/deploy-escrow.mjs",
-    "escrow:smoke": "node scripts/escrow-live-smoke.mjs"
+    "escrow:smoke": "node scripts/escrow-live-smoke.mjs",
+    "panel:live": "node scripts/panel-live-run.mjs"
   }
 }
