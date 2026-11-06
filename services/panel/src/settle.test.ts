@@ -7,7 +7,7 @@ import { createEscrow, deployEscrow, type Escrow } from '@lookout/escrow';
 import { anvilAvailable, startLocalChain, type LocalChain } from '../../../packages/escrow/src/anvil.ts';
 import { bountyIdFor, generateKeys, metaAddress, stealthAddressFor } from '@lookout/stealth';
 import { memoryJournal } from './journal.ts';
-import { rulingPayload, settleReportCase, type ReportCase, type SettleDeps } from './settle.ts';
+import { rulingPayload, settleCase, settleReportCase, type ReportCase, type SettleDeps } from './settle.ts';
 
 const skip = anvilAvailable() ? false : 'anvil (Foundry) is not installed';
 const DEPOSIT = parseEther('0.01');
@@ -183,4 +183,35 @@ test('the draw feeds the settlement: jurors drawn from the pool are the ones jud
   const pool: Candidate[] = JURORS.map((i) => ({ wallet: acct(i).address, rep: 10, stakeWei: parseEther('2'), nullifier: `n${i}` }));
   const drawn = drawJurors({ caseId: cid(9), seed: '0x' + 'ab'.repeat(32), candidates: pool, size: 3, minStakeWei: MIN_STAKE });
   assert.deepEqual([...drawn].sort(), JURORS.map((i) => acct(i).address.toLowerCase()).sort());
+});
+
+test('DISPUTE: a ruling is published, losing jurors are slashed, and no deposit or bounty moves', { skip }, async () => {
+  const c = { ...theCase(21), type: 'dispute' as const, reportId: '', reporter: acct(1).address, kind: 'address' as const, value: acct(1).address };
+  const rec = recorder();
+  const before = await as(0).totals();
+  const r = await settleCase(deps(rec), c, votes(c, ['clear', 'clear', 'block']));
+  assert.equal(r.status, 'settled');
+  assert.equal(r.outcome, 'clear', 'the flag is overturned');
+  assert.equal(r.result, null, 'there is no report to confirm or reject');
+  assert.equal(rec.created.length, 1, 'only the ruling, no bounty announcement');
+  assert.equal(rec.created[0].values.outcome, 'clear');
+  const after = await as(0).totals();
+  assert.equal(after.locked, before.locked, 'no deposit was touched');
+  assert.ok(r.repEvents.every((e) => e.kind === 'juror_won' || e.kind === 'juror_lost'), 'only jurors earn or lose reputation');
+  assert.equal(r.repEvents.filter((e) => e.kind === 'juror_lost').length, 1);
+});
+
+test('DISPUTE: inconclusive settles nothing, and settling twice does not slash twice', { skip }, async () => {
+  const c = { ...theCase(22), type: 'dispute' as const, reportId: '', kind: 'address' as const, value: acct(1).address };
+  const rec = recorder();
+  assert.equal((await settleCase(deps(rec), c, votes(c, ['block', null, null]))).status, 'inconclusive');
+  assert.equal(rec.created.length, 0);
+
+  const journal = memoryJournal();
+  const t = votes(c, ['clear', 'clear', 'block']);
+  await settleCase(deps(rec, journal), c, t);
+  const slashed = (await as(0).stakeOf(acct(4).address)).amount;
+  const again = await settleCase(deps(rec, journal), c, t);
+  assert.deepEqual(again.did, []);
+  assert.equal((await as(0).stakeOf(acct(4).address)).amount, slashed);
 });

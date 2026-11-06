@@ -5,6 +5,7 @@
 // Uses ARKIV_ACCESS_KEY (and ARKIV_ADDRESS if present) from the gitignored .env.
 // It prints the chain id, the latest block and the wallet balance. It never prints a key,
 // and it sends nothing but read calls.
+import './safe-errors.mjs';
 
 import { existsSync } from 'node:fs';
 

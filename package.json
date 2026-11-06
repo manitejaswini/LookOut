@@ -27,6 +27,10 @@
     "escrow:deploy": "node scripts/deploy-escrow.mjs",
     "escrow:smoke": "node scripts/escrow-live-smoke.mjs",
     "panel:live": "node scripts/panel-live-run.mjs",
-    "escrow:fund": "node scripts/escrow-fund-pool.mjs"
+    "escrow:fund": "node scripts/escrow-fund-pool.mjs",
+    "panel:keys": "node scripts/panel-keys.mjs",
+    "panel:run": "node services/panel/src/cli.ts",
+    "demo:jurors": "node scripts/demo-jurors.mjs",
+    "e2e:live": "node scripts/e2e-live.mjs"
   }
 }

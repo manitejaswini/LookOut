@@ -7,3 +7,5 @@ export * from './snapshot.ts';
 export * from './vote.ts';
 export * from './reputation.ts';
 export * from './panel.ts';
+export * from './owner-proof.ts';
+export * from './report-payload.ts';

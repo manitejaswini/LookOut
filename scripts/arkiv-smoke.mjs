@@ -9,6 +9,7 @@
 //   4. tries to patch it (this should FAIL, proving the readonly flag is enforced)
 //   5. reports the gas cost in tGLM
 // It never prints a key. The test entity expires on its own after 24 hours.
+import './safe-errors.mjs';
 
 import { existsSync } from 'node:fs';
 import { createPublicClient, createWalletClient, ExpirationTime } from '@arkiv-network/sdk';

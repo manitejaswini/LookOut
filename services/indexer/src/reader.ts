@@ -8,11 +8,11 @@ import { epochOf } from './snapshot.ts';
 /** Arkiv returns at most 100 rows per page (MAX_LIMIT, checked in packages/arkiv). */
 export const PAGE_SIZE = 100;
 
-/** The columns each kind needs. Un-indexed `bytes` payloads are not read: v1 does not use them. */
+/** The columns each kind needs. Only the `attestation` payload (the owner's proof of control) is read: nothing else uses a payload yet. */
 export const FIELDS: Record<IndexedKind, string[]> = {
   report: ['reportId', 'targetHash', 'targetKind', 'category'],
   verdict: ['targetHash', 'sourceType', 'sourceId', 'level', 'proofHash', 'reason'],
-  attestation: ['targetHash', 'claim'],
+  attestation: ['targetHash', 'claim', 'payload'],
   ruling: ['caseId', 'targetHash', 'outcome'],
   reputation: ['wallet', 'snapshotId', 'score'],
 };
@@ -20,6 +20,8 @@ export const FIELDS: Record<IndexedKind, string[]> = {
 /** A column comes back as { type, value } and a system field as a plain value. Flatten both to a string. */
 const plain = (v: unknown): string | undefined => {
   if (v == null) return undefined;
+  // a `bytes` column comes back as raw bytes: keep it as 0x hex so it fits the string-valued attributes
+  if (v instanceof Uint8Array) return `0x${Array.from(v, (b) => b.toString(16).padStart(2, '0')).join('')}`;
   if (typeof v === 'object' && 'value' in (v as object)) return plain((v as { value: unknown }).value);
   return String(v);
 };

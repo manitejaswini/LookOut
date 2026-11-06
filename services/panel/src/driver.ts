@@ -1,4 +1,5 @@
 import { drawJurors, PanelError, tally, type Candidate, type Reveal, type Tally, type TargetKind } from '@lookout/core';
+import { redactSecrets } from '@lookout/arkiv';
 import type { Journal } from './journal.ts';
 import type { ReportCase, SettleResult } from './settle.ts';
 
@@ -49,6 +50,8 @@ export interface DriverPorts {
 }
 
 export interface CaseRequest {
+  /** a report with a locked deposit, or an owner's dispute of a flag. Default: report */
+  type?: 'report' | 'dispute';
   caseId: string;
   reportId: string;
   reporter: string;
@@ -149,7 +152,7 @@ export function createDriver(ports: DriverPorts, cfg: DriverConfig = DEFAULT_DRI
       const t = tally({ caseId: r.caseId, jurors, commits, reveals, quorum: cfg.quorum });
 
       if (t.status === 'ruled') {
-        const c: ReportCase = { caseId: r.caseId, reportId: r.reportId, reporter: r.reporter, kind: r.kind, value: r.value, jurors, seed: s.seed!, reporterMeta: r.reporterMeta };
+        const c: ReportCase = { type: r.type, caseId: r.caseId, reportId: r.reportId, reporter: r.reporter, kind: r.kind, value: r.value, jurors, seed: s.seed!, reporterMeta: r.reporterMeta };
         const out = await ports.settle(c, t);
         return { ...s, phase: 'settled', result: out.result ?? undefined, note: undefined };
       }
@@ -181,7 +184,7 @@ export function createDriver(ports: DriverPorts, cfg: DriverConfig = DEFAULT_DRI
         }
         out.push({ id, phase: s.phase });
       } catch (e) {
-        out.push({ id, phase: s.phase, error: e instanceof Error ? e.message : String(e) });
+        out.push({ id, phase: s.phase, error: redactSecrets(e instanceof Error ? e.message : String(e)) });
       }
     }
     return out;

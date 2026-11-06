@@ -7,6 +7,8 @@
 //   npm run indexer:serve                         sync every 30 s and serve the TEMPORARY plain /lookup
 //
 // Reads ARKIV_ACCESS_KEY from the gitignored .env. It only reads from Arkiv, and never prints a key.
+import { installErrorScrubbing } from '@lookout/arkiv';
+installErrorScrubbing();
 
 import { existsSync } from 'node:fs';
 import { ENUMS, createArkivClients, createArkivReader } from '@lookout/arkiv';

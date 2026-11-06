@@ -6,6 +6,7 @@
 //   E  the round driver end to end on real blocks: seed block, draw, commit, reveal, ruling
 // Uses the throwaway wallet in .env. Never prints a key. Everything expires on its own.
 //   node scripts/panel-live-run.mjs
+import './safe-errors.mjs';
 
 import { existsSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';

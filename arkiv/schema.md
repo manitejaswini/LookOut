@@ -99,6 +99,7 @@ A scam report from a community member. Flag: `readonly`.
 
 - **Authorized writer:** any wallet. Its weight is the creator's reputation, scaled by `min(1, rep / cap)`.
 - **Lifetime:** 24 hours (43,200 blocks).
+- **Payload (v0):** JSON `{"v":0,"k":"domain|address|contract","t":"<plain target>","s":"<sealed bounty address, hex>"}` (`packages/core/src/report-payload.ts`). The plain target is there so the review panel can rule on it, since the entity only carries the target's hash. The panel checks that it hashes to `targetHash`, so a report cannot be re-pointed. `s` is optional: the reporter's stealth meta-address sealed to the panel's encryption key (`arkiv/stealth-format.md`). Without it the reporter simply gets no bounty.
 - **Report confirmation (Proposed):** a confirmed report is **not** extended. Extension is owner-only, and the alternative, `permissionlessExtension`, would let anyone pay gas to keep any report alive for up to 182 days, which defeats "spam vanishes in 24 hours". Instead, confirmation is recorded where it is anyway needed: `stake.status = returned` and the `ruling`. The indexer carries confirmed reports forward through the `reputation` checkpoint (below), so the report entity itself may expire.
 
 ### `lookout.v0.verdict`
@@ -129,7 +130,8 @@ The target's owner replies to a flag. Flag: `readonly`.
 | `claim` | `str` | yes | `legit` (owner disputes the flag) or `confirmed` |
 | `payload` | `bytes` optional | no | proof of control: a deployer signature over the `targetHash`, or an ENS name that resolves to the owner |
 
-- **Authorized writer:** any wallet, but the proof in the payload must verify. Owners of domains are an open question below.
+- **Authorized writer:** any wallet, but the proof in the payload must verify.
+- **Proof (v0, wallet addresses only):** the payload is the 65-byte `personal_sign` signature, made with the flagged address's own key, over `"Lookout dispute v0\ntarget: <targetHash>\nclaim: legit"` (`packages/core/src/owner-proof.ts`). The signer is recovered with plain ecrecover and must hash to the `targetHash`, AND must be the entity's `$creator`, so a published signature cannot be replayed by another wallet. It needs no network and no allowlist, so every indexer decides the same way. Contracts (no key) and domains (needs a DNS or file proof) cannot be disputed this way yet. The old placeholder allowlist (`registry.json` `attesters`) still works alongside it.
 - **Lifetime:** 30 days (1,296,000 blocks).
 - **Effect:** marks the target `disputed` and makes the panel service open a case. **It never clears a flag by itself.**
 

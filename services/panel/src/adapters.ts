@@ -1,9 +1,11 @@
-import { asc, eq } from '@arkiv-network/sdk/query';
+import { asc, eq, gt } from '@arkiv-network/sdk/query';
+import { key as keyValue } from '@arkiv-network/sdk/schema';
 import { SCHEMAS } from '@lookout/arkiv';
 import type { Candidate } from '@lookout/core';
 import type { Escrow } from '@lookout/escrow';
 import type { SeatStore } from '@lookout/worldid';
 import type { VoteRow } from './driver.ts';
+import type { AttestationRow, ReportRow } from './cases.ts';
 
 /**
  * The real-world side of the driver's ports. Each is small and takes what it needs as an argument.
@@ -78,5 +80,53 @@ export function arkivVoteReader(publicClient: AnyPublicClient) {
       });
     }
     return rows;
+  };
+}
+
+/* ------------------------------ reading cases ------------------------------ */
+
+const bytesOf = (v: unknown): Uint8Array | undefined => {
+  const x = v && typeof v === 'object' && 'value' in (v as object) ? (v as { value: unknown }).value : v;
+  if (x instanceof Uint8Array) return x;
+  if (typeof x === 'string' && /^0x([0-9a-fA-F]{2})*$/.test(x)) return Uint8Array.from((x.slice(2).match(/../g) ?? []).map((h) => parseInt(h, 16)));
+  return undefined;
+};
+const hexOf = (b: Uint8Array | undefined) => (b ? `0x${Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')}` : undefined);
+
+/**
+ * Every live `report` and `attestation` with its payload, for planCases. Pages by key so nothing repeats or is skipped.
+ * Like the other Arkiv adapters here, it is covered by the live run (scripts/panel-live-run.mjs) and not by unit tests.
+ */
+export function arkivCaseSource(publicClient: AnyPublicClient) {
+  async function pages(schema: unknown, fields: Record<string, true>): Promise<Record<string, unknown>[]> {
+    const all: Record<string, unknown>[] = [];
+    let after: string | undefined;
+    for (let i = 0; i < 1000; i++) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      let q = (publicClient.select({ $key: true, $creator: true, ...fields }) as any).from(schema);
+      if (after) q = q.where(gt('$key', keyValue(after as `0x${string}`)));
+      const { entities } = await q.orderBy(asc('$key')).limit(100).fetch();
+      all.push(...(entities as Record<string, unknown>[]));
+      if (entities.length < 100) return all;
+      after = String((entities as Record<string, unknown>[])[entities.length - 1].$key);
+    }
+    throw new Error('too many pages, refusing to loop forever');
+  }
+
+  return {
+    async reports(): Promise<ReportRow[]> {
+      const rows = await pages(SCHEMAS.report, { reportId: true, targetHash: true, payload: true });
+      return rows.map((e) => ({
+        key: String(e.$key).toLowerCase(), creator: String(e.$creator).toLowerCase(), reportId: String(plain(e.reportId)), targetHash: String(plain(e.targetHash)).toLowerCase(),
+        payload: bytesOf(e.payload),
+      }));
+    },
+    async attestations(): Promise<AttestationRow[]> {
+      const rows = await pages(SCHEMAS.attestation, { targetHash: true, claim: true, payload: true });
+      return rows.map((e) => ({
+        key: String(e.$key).toLowerCase(), creator: String(e.$creator).toLowerCase(), targetHash: String(plain(e.targetHash)).toLowerCase(),
+        claim: String(plain(e.claim)), payload: hexOf(bytesOf(e.payload)),
+      }));
+    },
   };
 }

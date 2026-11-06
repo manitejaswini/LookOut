@@ -1,8 +1,11 @@
 import { createWalletClient as createArkivWalletClient } from '@arkiv-network/sdk';
 import { createPublicClient, createWalletClient, custom, http, parseEther, type PublicClient } from 'viem';
-import { createReport, createVote, newReportId, revealVote, type EntityWriter, type TrustWriter } from '@lookout/arkiv';
-import { CONFIG } from '@lookout/core';
+import { createAttestation, createReport, createVote, newReportId, revealVote, type EntityWriter, type TrustWriter } from '@lookout/arkiv';
+import { CONFIG, encodeReportPayload } from '@lookout/core';
+import { metaAddress, sealMetaAddress } from '@lookout/stealth';
+import { loadOrCreateKeys } from './stealth-keys';
 import { createEscrow } from '@lookout/escrow';
+import type { DisputePorts } from '../flows/dispute-flow';
 import type { PaymentRecord, SendPorts } from '../flows/pay-flow';
 import type { ReportPorts } from '../flows/report-flow';
 import type { VotePorts, VoteStorage } from '../flows/vote-flow';
@@ -15,6 +18,9 @@ import type { WalletState } from './WalletProvider';
  * NOT YET RUN AGAINST A REAL WALLET: the flows are tested with fakes, and the Arkiv SDK with a browser (JSON-RPC) account
  * has not been exercised end to end. Treat this file as the first thing to check in the live run.
  */
+
+/** The panel's public encryption key. Set by `npm run panel:keys`. Without it no bounty address can be attached. */
+export const PAYER_ENC_KEY = (process.env.NEXT_PUBLIC_PAYER_ENC_KEY ?? '').trim();
 
 const needAddress = (w: WalletState): `0x${string}` => {
   if (!w.address) throw new Error('connect your wallet first');
@@ -37,7 +43,10 @@ export function reportPorts(w: WalletState): ReportPorts {
     switchChain: (name) => w.switchChain(name),
     deposit: async (reportId) => ({ hash: (await escrowFor(w).lockDeposit(reportId)).hash }),
     post: async (input) => {
-      const out = await createReport(arkivClient(w) as unknown as EntityWriter, input);
+      // the payload carries the plain target (so the panel can rule on it) and, if wanted, the bounty address sealed to the panel
+      const sealed = input.bounty && PAYER_ENC_KEY ? sealMetaAddress(metaAddress(loadOrCreateKeys()), PAYER_ENC_KEY, input.reportId) : undefined;
+      const payload = encodeReportPayload({ kind: input.kind, value: input.value, sealed });
+      const out = await createReport(arkivClient(w) as unknown as EntityWriter, { kind: input.kind, value: input.value, category: input.category, reportId: input.reportId, payload });
       return { entityKey: out.entityKey, expiresAt: String(out.expiresAt) };
     },
   };
@@ -91,4 +100,20 @@ export function payPorts(w: WalletState): SendPorts {
 
 export async function ethBalance(address: `0x${string}`): Promise<bigint> {
   return createPublicClient({ chain: ESCROW_CHAIN, transport: http() }).getBalance({ address });
+}
+
+/* ---------------------------------- disputes ---------------------------------- */
+
+/** The owner signs with the wallet (personal_sign), then the dispute is written to Arkiv from the same wallet. */
+export function disputePorts(w: WalletState): DisputePorts {
+  return {
+    connected: () => w.address,
+    sign: (message) => createWalletClient({ chain: ESCROW_CHAIN, transport: custom(w.provider()), account: needAddress(w) }).signMessage({ message }),
+    switchChain: () => w.switchChain('arkiv'),
+    post: async ({ target, signature }) => {
+      const bytes = Uint8Array.from((signature.slice(2).match(/../g) ?? []).map((h) => parseInt(h, 16)));
+      const out = await createAttestation(arkivClient(w) as unknown as EntityWriter, { kind: 'address', value: target, claim: 'legit', payload: bytes });
+      return { entityKey: out.entityKey };
+    },
+  };
 }

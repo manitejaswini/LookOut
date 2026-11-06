@@ -33,6 +33,8 @@ export interface SettleDeps {
 }
 
 export interface ReportCase {
+  /** a `dispute` is an owner contesting a flag: no deposit, so only a ruling and the jurors' own stakes and reputation are affected */
+  type?: 'report' | 'dispute';
   caseId: string;
   reportId: string;
   reporter: string;
@@ -49,6 +51,8 @@ export interface ReportCase {
 export interface SettleResult {
   status: 'settled' | 'inconclusive';
   result: 'confirmed' | 'rejected' | null;
+  /** what the panel decided about the target: block means it is a scam, clear means it is not */
+  outcome?: 'block' | 'clear' | null;
   /** steps this run actually performed (empty on a pure retry) */
   did: string[];
   repEvents: RepEvent[];
@@ -126,5 +130,45 @@ export async function settleReportCase(deps: SettleDeps, c: ReportCase, t: Tally
   for (const j of t.winners) repEvents.push({ wallet: j.toLowerCase(), kind: 'juror_won', at, ref: c.caseId });
   for (const j of [...t.losers, ...t.nonReveal]) repEvents.push({ wallet: j.toLowerCase(), kind: 'juror_lost', at, ref: c.caseId });
 
-  return { status: 'settled', result, did, repEvents };
+  return { status: 'settled', result, outcome: t.outcome, did, repEvents };
 }
+
+
+/**
+ * Settles a DISPUTE case: the owner of a flagged address contested the flag. There is no deposit, so nothing moves for the
+ * owner. The panel publishes its ruling (a `clear` ruling overrides the flags, a `block` ruling confirms them), jurors on the
+ * losing side or who did not reveal are slashed, and jurors earn or lose reputation as in any case.
+ */
+export async function settleDisputeCase(deps: SettleDeps, c: ReportCase, t: Tally): Promise<SettleResult> {
+  if (t.status !== 'ruled' || t.outcome === null) return { status: 'inconclusive', result: null, outcome: null, did: [], repEvents: [] };
+
+  const did: string[] = [];
+  const step = async (key: string, run: () => Promise<string | void>) => {
+    const k = `${c.caseId}:${key}`;
+    if (deps.journal.has(k)) return;
+    const detail = await run();
+    deps.journal.mark(k, detail ?? '');
+    did.push(key);
+  };
+
+  await step('ruling', async () => {
+    const out = await createRuling(deps.arkiv, { caseId: c.caseId, kind: c.kind, value: c.value, outcome: t.outcome!, payload: rulingPayload(c, t) });
+    return out.entityKey;
+  });
+  for (const [group, wei] of [[t.losers, deps.slashLoserWei], [t.nonReveal, deps.slashNonRevealWei]] as const) {
+    for (const j of group) {
+      if (wei <= 0n) continue;
+      await step(`slash:${j.toLowerCase()}`, async () => (await deps.escrow.slash(j, wei)).hash);
+    }
+  }
+
+  const at = deps.now();
+  const repEvents: RepEvent[] = [];
+  for (const j of t.winners) repEvents.push({ wallet: j.toLowerCase(), kind: 'juror_won', at, ref: c.caseId });
+  for (const j of [...t.losers, ...t.nonReveal]) repEvents.push({ wallet: j.toLowerCase(), kind: 'juror_lost', at, ref: c.caseId });
+  return { status: 'settled', result: null, outcome: t.outcome, did, repEvents };
+}
+
+/** One entry point for the driver: a report case or a dispute case. */
+export const settleCase = (deps: SettleDeps, c: ReportCase, t: Tally): Promise<SettleResult> =>
+  c.type === 'dispute' ? settleDisputeCase(deps, c, t) : settleReportCase(deps, c, t);

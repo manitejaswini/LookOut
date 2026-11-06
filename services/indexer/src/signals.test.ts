@@ -152,3 +152,45 @@ test('the entity key is carried through as the reason entityId, so a user can in
   const { result } = run([e]);
   assert.equal(result.reasons[0].entityId, e.key);
 });
+
+/* ---------- attestations with an owner proof ---------- */
+
+import { privateKeyToAccount } from 'viem/accounts';
+import { disputeMessage } from '@lookout/core';
+
+const ownerAcct = privateKeyToAccount(('0x' + '33'.repeat(32)) as `0x${string}`);
+const ownerHash = targetHash('address', ownerAcct.address);
+const proven = async (creator: string, signer = ownerAcct, hash = ownerHash, claim = 'legit') => {
+  const sig = await signer.signMessage({ message: disputeMessage(hash) });
+  const e = attestation(creator, claim, hash);
+  e.attrs.payload = sig;
+  return e;
+};
+const flagged = (hash: string) => [verdict(ADDR.feed, { sourceType: 'feed', sourceId: 'openfeed-demo', target: hash }), verdict(ADDR.checker, { sourceType: 'checker', sourceId: 'lookout-checker', target: hash })];
+
+test('OWNER PROOF: the owner of a flagged address marks it DISPUTED with no allowlist, and it still does not clear the flag', async () => {
+  const { result } = run([...flagged(ownerHash), await proven(ownerAcct.address)], ownerHash);
+  assert.equal(result.disputed, true);
+  assert.equal(result.verdict, 'block', 'a dispute alone never clears a flag, only a panel ruling can');
+});
+
+test('OWNER PROOF: nobody else can dispute for the owner, even replaying the owner signature', async () => {
+  const stranger = privateKeyToAccount(('0x' + '44'.repeat(32)) as `0x${string}`);
+  const mine = run([...flagged(ownerHash), await proven(stranger.address, stranger)], ownerHash);
+  assert.equal(mine.result.disputed, false, "a stranger's own signature proves nothing about this address");
+  assert.ok(mine.dropped.some((d) => d.reason === 'attester not recognised'));
+
+  const replay = run([...flagged(ownerHash), await proven(stranger.address, ownerAcct)], ownerHash);
+  assert.equal(replay.result.disputed, false, 'the owner signature, published by someone else, is useless');
+});
+
+test('OWNER PROOF: a dispute with no proof, or with a garbled one, is ignored', async () => {
+  const bare = attestation(ownerAcct.address, 'legit', ownerHash);
+  const garbled = await proven(ownerAcct.address);
+  garbled.attrs.payload = garbled.attrs.payload.slice(0, 20) + '00' + garbled.attrs.payload.slice(22);
+  for (const a of [bare, garbled]) assert.equal(run([...flagged(ownerHash), a], ownerHash).result.disputed, false);
+});
+
+test('OWNER PROOF: a `confirmed` claim never counts as a dispute, proof or not', async () => {
+  assert.equal(run([...flagged(ownerHash), await proven(ownerAcct.address, ownerAcct, ownerHash, 'confirmed')], ownerHash).result.disputed, false);
+});

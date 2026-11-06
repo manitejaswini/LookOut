@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { formatEther } from 'viem';
 import { checkTarget, MODE } from './lookup';
+import DisputeBox from './DisputeBox';
 import { fmtAge } from './hooks';
 import { parsePayment, PayError, reviewPayment, sendPayment, type PaymentRecord, type Review, type Tier } from './flows/pay-flow';
 import { ethBalance, paymentHistory, payPorts } from './wallet/ports';
@@ -152,6 +153,7 @@ export default function PayPage() {
             </button>
           </div>
           {error && <p className="tiny" role="alert">{error}</p>}
+          {review.check && review.check.verdict !== 'unknown' && <DisputeBox target={review.payment.recipient} />}
           <p className="tiny">
             Think this is wrong, or know of a scam we missed?{' '}
             <Link href={`/report?kind=address&value=${review.payment.recipient}`}>Report this address</Link>.

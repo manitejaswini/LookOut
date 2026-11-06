@@ -149,3 +149,60 @@ test('bad input is refused before anything is saved or sent', async () => {
   assert.equal(sent.length, 0);
   assert.equal(savedVote(ports.storage, CASE, J), null);
 });
+
+/* ------------------------------ disputing ------------------------------ */
+
+import { privateKeyToAccount } from 'viem/accounts';
+import { verifyOwnerProof, targetHash as th } from '@lookout/core';
+import { DisputeError, runDispute, whyNotDispute, type DisputePorts, type DisputeStep } from './dispute-flow.ts';
+
+const ownerAcct = privateKeyToAccount(('0x' + '77'.repeat(32)) as `0x${string}`);
+const OWN = ownerAcct.address.toLowerCase();
+
+function disputePorts(connected: string | null, over: Partial<DisputePorts> = {}) {
+  const calls: string[] = [];
+  let posted: { target: string; signature: string } | undefined;
+  const ports: DisputePorts = {
+    connected: () => connected,
+    sign: async (m) => (calls.push('sign'), ownerAcct.signMessage({ message: m })),
+    switchChain: async () => void calls.push('chain'),
+    post: async (i) => (calls.push('post'), (posted = i), { entityKey: '0xe' }),
+    ...over,
+  };
+  return { ports, calls, posted: () => posted };
+}
+
+test('the dispute button is only offered to the owner of an ordinary wallet address', () => {
+  assert.equal(whyNotDispute(OWN, OWN), null);
+  assert.match(whyNotDispute(OWN, null)!, /Connect the wallet/);
+  assert.match(whyNotDispute(OWN, '0x' + '99'.repeat(20))!, /Only the owner/);
+  assert.match(whyNotDispute('evil-site.example', OWN)!, /Only a wallet address/);
+});
+
+test('DISPUTE: the owner signs, the signature is the proof the panel will accept, and it is posted to Arkiv', async () => {
+  const d = disputePorts(OWN);
+  const steps: DisputeStep[] = [];
+  const r = await runDispute(d.ports, OWN, (s) => steps.push(s));
+  assert.deepEqual(d.calls, ['sign', 'chain', 'post']);
+  assert.deepEqual(steps, ['validate', 'sign', 'post', 'done']);
+  // the very signature that was posted verifies as an owner proof for this target, written by this wallet
+  const proof = verifyOwnerProof({ targetHash: th('address', OWN), creator: OWN }, d.posted()!.signature);
+  assert.deepEqual(proof, { ok: true, address: OWN });
+  assert.equal(r.entityKey, '0xe');
+});
+
+test('nothing is signed or sent for the wrong wallet, no wallet, or a non-address target', async () => {
+  for (const [connected, target, code] of [['0x' + '99'.repeat(20), OWN, 'wrong-wallet'], [null, OWN, 'no-wallet'], [OWN, 'evil-site.example', 'not-an-address']] as const) {
+    const d = disputePorts(connected);
+    await assert.rejects(runDispute(d.ports, target), (e) => e instanceof DisputeError && e.code === code, code);
+    assert.deepEqual(d.calls, []);
+  }
+});
+
+test('declining the signature stops everything, and a failed post says so', async () => {
+  const declined = disputePorts(OWN, { sign: async () => { throw new Error('User rejected the request'); } });
+  await assert.rejects(runDispute(declined.ports, OWN), (e) => e instanceof DisputeError && e.code === 'declined' && /rejected/.test(e.message));
+  assert.deepEqual(declined.calls, []);
+  const failed = disputePorts(OWN, { post: async () => { throw new Error('arkiv down'); } });
+  await assert.rejects(runDispute(failed.ports, OWN), (e) => e instanceof DisputeError && e.code === 'post-failed');
+});

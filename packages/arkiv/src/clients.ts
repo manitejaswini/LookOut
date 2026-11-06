@@ -15,8 +15,9 @@ import type { EntityWriter } from './writers.ts';
 export function createArkivClients(opts: { accessKey: string; privateKey: `0x${string}` }) {
   const chain = rabdi({ accessKey: opts.accessKey });
   const account = privateKeyToAccount(opts.privateKey);
-  const publicClient = createPublicClient({ chain, transport: http() });
-  const walletClient = createWalletClient({ chain, transport: http(), account });
+  const transport = () => http(undefined, { timeout: 30_000, retryCount: 4, retryDelay: 2000 });
+  const publicClient = createPublicClient({ chain, transport: transport() });
+  const walletClient = createWalletClient({ chain, transport: transport(), account });
   return {
     address: account.address,
     publicClient,
