@@ -1,5 +1,5 @@
 import { CONFIG } from './config.ts';
-import type { CheckResult, Signal, SourceType, Target } from './types.ts';
+import type { CheckResult, ScoringInput, Signal, SourceType, Target } from './types.ts';
 
 /** report weight = min(1, rep / cap) */
 export const reportWeight = (rep: number) => Math.min(1, Math.max(0, rep / CONFIG.REP_CAP));
@@ -7,7 +7,7 @@ export const reportWeight = (rep: number) => Math.min(1, Math.max(0, rep / CONFI
 export const SNAPSHOT_ID = 'snap-0412';
 
 /** Reference scoring logic from the PRD. Pure function, no I/O. */
-export function scoreTarget(t: Target): CheckResult {
+export function scoreTarget(t: ScoringInput): CheckResult {
   const typeScores: Partial<Record<SourceType, number>> = {};
   for (const s of t.signals) {
     typeScores[s.sourceType] = Math.max(typeScores[s.sourceType] ?? 0, s.weight);

@@ -1,0 +1,4 @@
+{
+  "_comment": "Known drainer contracts, by keccak256 of their RUNTIME bytecode. EVERY entry needs a 'source' (a published analysis, report or registry) so the claim can be re-checked. An unsourced entry is refused at load time. Empty on purpose: real hashes must come from real, cited reports, and are not invented here.",
+  "entries": []
+}

@@ -294,8 +294,8 @@ Resolved by the docs: expiry units and extension, attribute types and limits, qu
 
 1. **Domain ownership proof:** how does a domain owner prove control for an `attestation`? Options: a DNS TXT record, a signed file on the site, or an ENS name that points at the project. Contract and address owners can sign with the deployer key.
 2. **Meta-address encryption:** what is the `report` payload encrypted to, and who may read it? The PRD says encrypted but not to whom.
-3. **Does `extendEntity` work on a `readonly` entity?** The docs say `readonly` blocks patching. `verdict` refresh depends on extension still working. Test on day one.
-4. **Gas cost and faucet limits:** how many writes does one faucet claim fund, and what do 1,000 attack-simulation wallets cost?
+3. ~~**Does `extendEntity` work on a `readonly` entity?**~~ **Resolved: yes**, verified live (see above).
+4. **Faucet limits:** one claim gave 10 tGLM and a write costs about 0.0002 tGLM, so cost is not the issue. What is the faucet's claim limit per account, if funding 1,000 attack wallets needs more than one funder?
 5. **Response size caps and RPC limits** for indexers reading many entities at once.
 6. **Subdomain grouping:** is exact host enough for the demo?
 7. **Can the docs be relied on as read?** The Sources section notes how these answers were obtained.
@@ -304,7 +304,34 @@ Resolved by the docs: expiry units and extension, attribute types and limits, qu
 
 Read on 2026-11-06 from the Arkiv docs (`docs.arkiv.network`): `start-here/introduction`, `start-here/clients`, `writing/create`, `writing/expiration`, `writing/change`, `schemas/define`, `schemas/column-types`, `querying/without-schema`, `querying/paginate`, `reference/limits`, `reference/query-language`, `networks/rabdi`. The SDK package `@arkiv-network/sdk` version 1.0.1 was downloaded and unpacked (not run) to confirm that it exports `rabdi`.
 
-The docs were read through a summarising fetch tool, so exact numbers should be treated as likely but unconfirmed. **The first writer pull request must assert each limit used here** (attribute counts, 128-byte strings, 7,884,000 block maximum, 100-row pages) against the real SDK constants and fail loudly if they differ.
+The docs were read through a summarising fetch tool, so the numbers were first treated as unconfirmed. **They are now checked against the real SDK** (v1.0.1) by `packages/arkiv/src/sdk-limits.test.ts`, which fails loudly if the SDK ever disagrees:
+
+| Checked against the SDK | Result |
+| --- | --- |
+| 32 attributes per entity, 32-byte names, 128-byte `str`, 128 KiB `bytes`, 18 decimal places | all match |
+| 100 rows per page (`MAX_LIMIT`) | matches |
+| 2-second blocks, 7,884,000-block maximum (`MAX_LIFETIME`) | match |
+| 24 h = 43,200, 6 h = 10,800, 30 d = 1,296,000, 90 d = 3,888,000 blocks | match |
+| `$creator`, `$owner`, `$key`, `$expiresAt` are system fields; the schema tag is `arkiv.schema` | match |
+| Rabdi chain id 7794095 | matches |
+
+Two details the tests found that the docs did not make obvious: `MAX_LIFETIME` is a `bigint` (not a number), and a lifetime over the maximum is **not** rejected when you build it with `ExpirationTime`, only when it is sent. So our own tests must check every lifetime against the maximum, and they do.
+
+The nine schemas now exist in code in `packages/arkiv/src/schemas.ts`, with lifetimes and creation flags in `lifetimes.ts`. `packages/arkiv/src/schemas.test.ts` encodes this document's tables (which columns are indexed, which are optional, the lifetimes in blocks, the creation flags), so the document and the code cannot drift apart silently. ### Verified on the live Rabdi testnet (2026-11-06)
+
+`npm run arkiv:smoke` (script `scripts/arkiv-smoke.mjs`) wrote and read a real entity with the throwaway test wallet:
+
+| Question | Result |
+| --- | --- |
+| Can a `lookout.v0.report` be created with our schema, flags and 24 h lifetime? | **Yes.** |
+| Can it be read back by indexed attributes (`targetHash` + `reportId`)? | **Yes.** `$creator` and `$owner` were our wallet. Blocks until expiry were 43,199, matching 24 h. |
+| **Does `extendEntity` work on a `readonly` entity?** | **Yes.** So a source can refresh a `verdict` by extension, and the design stands. The new lifetime is counted from now (a 48 h extension landed 86,400 blocks ahead), as the docs said. |
+| Does `readonly` really block `patchEntity`? | **Yes.** The patch was rejected with `EntityMutationError`. |
+| What does a write cost? | About **0.0002 tGLM** for the whole run (one create plus one extend). A 10 tGLM faucet claim covers tens of thousands of writes. |
+
+The cost result matters for the 1,000-wallet attack demo: funding a fresh wallet with a few thousandths of a tGLM is cheap, so running the attack on the real chain is realistic. It still links those wallets to their funder, which we say openly.
+
+Still **not** checked live: response size caps when an indexer reads many entities at once, and rate limits with the access key.
 
 ## Changes from the PRD
 

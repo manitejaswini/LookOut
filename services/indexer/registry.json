@@ -1,0 +1,10 @@
+{
+  "_comment": "Who the indexer trusts. Public addresses only, never keys. See 'Trusted writers' in arkiv/schema.md. Everything here is a demo default.",
+  "sources": [
+    { "sourceId": "lookout-checker", "sourceType": "checker", "address": "0x37324A0CC17959Ee99233c8552e741519983573E" },
+    { "sourceId": "openfeed-demo", "sourceType": "feed", "address": "0x37324A0CC17959Ee99233c8552e741519983573E" }
+  ],
+  "attesters": [],
+  "panel": null,
+  "reputation": {}
+}
