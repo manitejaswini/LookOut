@@ -1,8 +1,8 @@
 import { CONFIG } from './config.ts';
 
 /**
- * Reputation: earned when reports are confirmed, lost when rejected (twice as fast), earned or lost by reviewers for how
- * they vote, non-transferable, and it decays. A new wallet starts at 0, so a thousand fresh wallets still weigh nothing.
+ * Reputation: earned when reports are confirmed, lost when rejected (twice as fast), non-transferable, and it decays. A new wallet starts at 0, so a thousand fresh wallets still weigh nothing. The one exception is a wallet bound to a unique
+ * human (World ID): it has a small FLOOR, and one human can only ever have one such wallet.
  *
  * Everything here is a PURE function of public data, so any indexer that reads the same events reaches the same scores.
  * Arkiv entities expire, so scores are CHECKPOINTS: each is computed from the previous checkpoint plus the events since,
@@ -13,7 +13,7 @@ import { CONFIG } from './config.ts';
  * difference is negligible, and it keeps the rule easy to recompute and audit.
  */
 
-export type RepEventKind = 'report_confirmed' | 'report_rejected' | 'juror_won' | 'juror_lost';
+export type RepEventKind = 'report_confirmed' | 'report_rejected';
 
 export interface RepEvent {
   /** 0x address, compared case-insensitively */
@@ -35,27 +35,24 @@ export interface Checkpoint {
 export interface RepConfig {
   confirmGain: number;
   rejectMultiplier: number;
-  jurorWin: number;
-  jurorLoss: number;
   halfLifeDays: number;
   max: number;
+  /** the lowest score a verified human can have */
+  humanFloor: number;
 }
 
 export const DEFAULT_REP_CONFIG: RepConfig = {
   confirmGain: CONFIG.REP_CONFIRM_GAIN,
   rejectMultiplier: CONFIG.REP_REJECT_MULTIPLIER,
-  jurorWin: CONFIG.REP_JUROR_WIN,
-  jurorLoss: CONFIG.REP_JUROR_LOSS,
   halfLifeDays: CONFIG.REP_HALF_LIFE_DAYS,
   max: CONFIG.REP_MAX,
+  humanFloor: CONFIG.HUMAN_BASE_REP,
 };
 
 export function deltaFor(kind: RepEventKind, cfg: RepConfig = DEFAULT_REP_CONFIG): number {
   switch (kind) {
     case 'report_confirmed': return cfg.confirmGain;
     case 'report_rejected': return -cfg.confirmGain * cfg.rejectMultiplier;
-    case 'juror_won': return cfg.jurorWin;
-    case 'juror_lost': return -cfg.jurorLoss;
   }
 }
 
@@ -84,6 +81,7 @@ export function nextCheckpoint(
   at: number,
   snapshotId: string,
   cfg: RepConfig = DEFAULT_REP_CONFIG,
+  humans: ReadonlySet<string> = new Set(),
 ): Checkpoint {
   if (prev && at < prev.at) throw new Error('a checkpoint cannot be earlier than the one before it');
   const scores = new Map<string, number>();
@@ -102,6 +100,12 @@ export function nextCheckpoint(
     if (seen.has(key)) continue;
     seen.add(key);
     scores.set(w, round6(clamp((scores.get(w) ?? 0) + deltaFor(e.kind, cfg), cfg.max)));
+  }
+
+  // a verified human never falls below the floor, and appears in every checkpoint so the floor is public and recomputable
+  for (const h of humans) {
+    const w = h.toLowerCase();
+    scores.set(w, Math.max(scores.get(w) ?? 0, cfg.humanFloor));
   }
 
   // a wallet at (almost) zero is the same as one we never heard of, so it is not carried forward

@@ -25,14 +25,10 @@ contract Reenterer {
         entered++;
         // try to take the same money twice
         try escrow.claim() { innerSucceeded = true; } catch {}
-        try escrow.withdraw() { innerSucceeded = true; } catch {}
     }
 
     function doDeposit(bytes16 id) external payable { escrow.deposit{value: msg.value}(id); }
     function doClaim() external { escrow.claim(); }
-    function doStake() external payable { escrow.stake{value: msg.value}(); }
-    function doRequestUnstake() external { escrow.requestUnstake(); }
-    function doWithdraw() external { escrow.withdraw(); }
 }
 
 /// An address that refuses ETH, like a contract with no receive function.
@@ -55,8 +51,6 @@ contract LookoutEscrowTest {
 
     uint256 constant DEPOSIT = 0.01 ether;
     uint256 constant BOUNTY = 0.005 ether;
-    uint256 constant MIN_STAKE = 1 ether;
-    uint64 constant UNSTAKE_DELAY = 7 days;
     uint64 constant WINDOW = 30 days;
 
     address constant RESOLVER = address(0xBEEF);
@@ -77,7 +71,7 @@ contract LookoutEscrowTest {
     receive() external payable {}
 
     function setUp() public {
-        escrow = new LookoutEscrow(RESOLVER, DEPOSIT, BOUNTY, MIN_STAKE, UNSTAKE_DELAY, WINDOW);
+        escrow = new LookoutEscrow(RESOLVER, DEPOSIT, BOUNTY, WINDOW);
         vm.deal(ALICE, 100 ether);
         vm.deal(BOB, 100 ether);
         vm.deal(CAROL, 100 ether);
@@ -99,7 +93,7 @@ contract LookoutEscrowTest {
     }
 
     function solvent() internal view {
-        eq(address(escrow).balance, escrow.totalLocked() + escrow.totalStaked() + escrow.bountyPool() + escrow.totalClaimable(), "solvency");
+        eq(address(escrow).balance, escrow.totalLocked() + escrow.bountyPool() + escrow.totalClaimable(), "solvency");
     }
 
     /* -------------------------------- deposits -------------------------------- */
@@ -183,7 +177,7 @@ contract LookoutEscrowTest {
         escrow.reject(ALICE, ID1);
         vm.prank(ATTACKER);
         vm.expectRevert(LookoutEscrow.NotResolver.selector);
-        escrow.slash(ALICE, 1);
+        escrow.refund(ALICE, ID1);
         vm.prank(ATTACKER);
         vm.expectRevert(LookoutEscrow.NotResolver.selector);
         escrow.payBounty(BID1, payable(ATTACKER));
@@ -339,7 +333,7 @@ contract LookoutEscrowTest {
     function test_aRecipientThatReentersPayBountyIsStopped() public {
         fundPool();
         ReenteringResolver r = new ReenteringResolver();
-        LookoutEscrow e2 = new LookoutEscrow(address(r), DEPOSIT, BOUNTY, MIN_STAKE, UNSTAKE_DELAY, WINDOW);
+        LookoutEscrow e2 = new LookoutEscrow(address(r), DEPOSIT, BOUNTY, WINDOW);
         vm.deal(ALICE, 10 ether);
         vm.prank(ALICE);
         e2.deposit{value: DEPOSIT}(ID1);
@@ -354,6 +348,45 @@ contract LookoutEscrowTest {
         vm.expectRevert(LookoutEscrow.TransferFailed.selector); // the inner call hit the guard, so the payment as a whole fails
         r.pay(payable(address(r)));
         eq(e2.bountyPool(), DEPOSIT, "nothing left the pool");
+    }
+
+    /* --------------------------------- refund --------------------------------- */
+
+    function test_refundReturnsTheDepositWithNoBountyAndIsNotAConfirmation() public {
+        fundPool();
+        deposit(ALICE, ID1);
+        vm.startPrank(RESOLVER);
+        escrow.refund(ALICE, ID1);
+        // a refund earns nothing: there is no confirmation for a bounty to attach to
+        vm.expectRevert(LookoutEscrow.NotConfirmed.selector);
+        escrow.payBounty(BID1, payable(STEALTH));
+        vm.stopPrank();
+        eq(escrow.claimable(ALICE), DEPOSIT, "the deposit is claimable");
+        eq(escrow.confirmedCount(), 0, "not counted as a confirmation");
+        yes(status(ALICE, ID1) == LookoutEscrow.Status.Refunded, "marked refunded");
+        vm.prank(ALICE);
+        escrow.claim();
+        eq(ALICE.balance, 100 ether, "back to where Alice started");
+        solvent();
+    }
+
+    function test_onlyTheResolverCanRefundAndOnlyOnce() public {
+        deposit(ALICE, ID1);
+        vm.prank(ATTACKER);
+        vm.expectRevert(LookoutEscrow.NotResolver.selector);
+        escrow.refund(ALICE, ID1);
+        vm.startPrank(RESOLVER);
+        escrow.refund(ALICE, ID1);
+        vm.expectRevert(LookoutEscrow.NotLocked.selector);
+        escrow.refund(ALICE, ID1);
+        vm.expectRevert(LookoutEscrow.NotLocked.selector);
+        escrow.confirm(ALICE, ID1);
+        vm.expectRevert(LookoutEscrow.NotLocked.selector);
+        escrow.reject(ALICE, ID1);
+        vm.stopPrank();
+        vm.prank(ALICE);
+        vm.expectRevert(LookoutEscrow.NotLocked.selector);
+        escrow.reclaim(ID1);
     }
 
     /* --------------------------------- reclaim -------------------------------- */
@@ -429,126 +462,6 @@ contract LookoutEscrowTest {
         solvent();
     }
 
-    function test_withdrawCannotBeReenteredToTakeTheStakeTwice() public {
-        Reenterer r = new Reenterer(escrow);
-        vm.deal(address(this), 10 ether);
-        r.doStake{value: MIN_STAKE}();
-        deposit(ALICE, ID2);
-        r.doRequestUnstake();
-        vm.warp(block.timestamp + UNSTAKE_DELAY);
-        r.doWithdraw();
-        eq(address(r).balance, MIN_STAKE, "paid exactly once");
-        yes(!r.innerSucceeded(), "the re-entry failed");
-        eq(address(escrow).balance, DEPOSIT, "other money untouched");
-        solvent();
-    }
-
-    /* ---------------------------------- staking ------------------------------- */
-
-    function stakeAs(address who, uint256 amount) internal {
-        vm.prank(who);
-        escrow.stake{value: amount}();
-    }
-
-    function test_aReviewerNeedsTheMinimumStake() public {
-        vm.prank(BOB);
-        vm.expectRevert(LookoutEscrow.BelowMinimum.selector);
-        escrow.stake{value: MIN_STAKE - 1}();
-        yes(!escrow.isEligibleReviewer(BOB), "not eligible");
-        stakeAs(BOB, MIN_STAKE);
-        yes(escrow.isEligibleReviewer(BOB), "eligible");
-        eq(escrow.totalStaked(), MIN_STAKE, "totalStaked");
-        solvent();
-    }
-
-    function test_topUpsAdd() public {
-        stakeAs(BOB, MIN_STAKE);
-        stakeAs(BOB, 0.5 ether);
-        (uint128 amount, ) = escrow.stakes(BOB);
-        eq(amount, MIN_STAKE + 0.5 ether, "added");
-        solvent();
-    }
-
-    function test_unstakeNeedsTheDelayAndThenReturnsTheStake() public {
-        stakeAs(BOB, 2 ether);
-        vm.prank(BOB);
-        vm.expectRevert(LookoutEscrow.NotUnstaking.selector);
-        escrow.withdraw(); // never asked to unstake
-
-        vm.prank(BOB);
-        escrow.requestUnstake();
-        yes(!escrow.isEligibleReviewer(BOB), "an unstaking reviewer is not drawn for new cases");
-        vm.warp(block.timestamp + UNSTAKE_DELAY - 1);
-        vm.prank(BOB);
-        vm.expectRevert(LookoutEscrow.TooEarly.selector);
-        escrow.withdraw();
-
-        vm.warp(block.timestamp + 1);
-        uint256 before = BOB.balance;
-        vm.prank(BOB);
-        escrow.withdraw();
-        eq(BOB.balance, before + 2 ether, "stake returned");
-        eq(escrow.totalStaked(), 0, "nothing staked");
-        solvent();
-    }
-
-    function test_askingToUnstakeAgainDoesNotRestartTheClock() public {
-        stakeAs(BOB, MIN_STAKE);
-        vm.prank(BOB);
-        escrow.requestUnstake();
-        (, uint64 first) = escrow.stakes(BOB);
-        vm.warp(block.timestamp + 3 days);
-        vm.prank(BOB);
-        escrow.requestUnstake();
-        (, uint64 second) = escrow.stakes(BOB);
-        eq(second, first, "unchanged");
-    }
-
-    function test_stakingAgainCancelsAPendingUnstake() public {
-        stakeAs(BOB, MIN_STAKE);
-        vm.prank(BOB);
-        escrow.requestUnstake();
-        stakeAs(BOB, 0.1 ether);
-        (, uint64 unlockAt) = escrow.stakes(BOB);
-        eq(unlockAt, 0, "cancelled");
-        yes(escrow.isEligibleReviewer(BOB), "eligible again");
-    }
-
-    function test_slashMovesTheStakeIntoThePoolCappedAtWhatIsStaked() public {
-        stakeAs(BOB, 2 ether);
-        vm.prank(RESOLVER);
-        escrow.slash(BOB, 0.5 ether);
-        (uint128 left, ) = escrow.stakes(BOB);
-        eq(left, 1.5 ether, "reduced");
-        eq(escrow.bountyPool(), 0.5 ether, "into the pool, not to the resolver");
-        vm.prank(RESOLVER);
-        escrow.slash(BOB, 100 ether); // more than they have
-        (left, ) = escrow.stakes(BOB);
-        eq(left, 0, "emptied, not underflowed");
-        eq(escrow.bountyPool(), 2 ether, "exactly what they had");
-        solvent();
-    }
-
-    function test_slashingSomeoneWithNoStakeTakesNothingAndDoesNotRevert() public {
-        vm.prank(RESOLVER);
-        escrow.slash(ATTACKER, 1 ether);
-        eq(escrow.bountyPool(), 0, "nothing");
-    }
-
-    function test_aReviewerCannotEscapeASlashByUnstaking() public {
-        stakeAs(BOB, 2 ether);
-        vm.prank(BOB);
-        escrow.requestUnstake();
-        vm.prank(RESOLVER);
-        escrow.slash(BOB, 1 ether); // still slashable while the clock runs
-        vm.warp(block.timestamp + UNSTAKE_DELAY);
-        uint256 before = BOB.balance;
-        vm.prank(BOB);
-        escrow.withdraw();
-        eq(BOB.balance, before + 1 ether, "only the remainder comes back");
-        solvent();
-    }
-
     /* -------------------------------- the pool -------------------------------- */
 
     function test_aPlainTransferGoesToThePoolSoNoEthIsUnaccounted() public {
@@ -562,17 +475,17 @@ contract LookoutEscrowTest {
 
     function test_theConstructorRefusesNonsense() public {
         vm.expectRevert(LookoutEscrow.ZeroAddress.selector);
-        new LookoutEscrow(address(0), DEPOSIT, BOUNTY, MIN_STAKE, UNSTAKE_DELAY, WINDOW);
+        new LookoutEscrow(address(0), DEPOSIT, BOUNTY, WINDOW);
         vm.expectRevert(LookoutEscrow.BadConfig.selector);
-        new LookoutEscrow(RESOLVER, 0, BOUNTY, MIN_STAKE, UNSTAKE_DELAY, WINDOW);
+        new LookoutEscrow(RESOLVER, 0, BOUNTY, WINDOW);
         vm.expectRevert(LookoutEscrow.BadConfig.selector);
-        new LookoutEscrow(RESOLVER, DEPOSIT, BOUNTY, MIN_STAKE, UNSTAKE_DELAY, 0);
+        new LookoutEscrow(RESOLVER, DEPOSIT, BOUNTY, 0);
     }
 
     /* ---------------------------- solvency, fuzzed ---------------------------- */
 
     /// Whatever sequence of operations happens, the escrow always holds EXACTLY what it owes:
-    /// locked deposits + reviewer stakes + the bounty pool + refunds waiting to be claimed.
+    /// locked deposits + the bounty pool + refunds waiting to be claimed.
     function testFuzz_theEscrowIsAlwaysExactlySolvent(uint256 seed) public {
         address[4] memory people = [ALICE, BOB, CAROL, address(0xD00D)];
         vm.deal(address(0xD00D), 100 ether);
@@ -580,7 +493,7 @@ contract LookoutEscrowTest {
             seed = uint256(keccak256(abi.encode(seed, i)));
             address who = people[seed % 4];
             bytes16 id = bytes16(uint128(seed >> 8) % 6);
-            uint256 op = (seed >> 32) % 11;
+            uint256 op = (seed >> 32) % 8;
 
             if (op == 0) { vm.prank(who); try escrow.deposit{value: DEPOSIT}(id) {} catch {} }
             else if (op == 1) { vm.prank(RESOLVER); try escrow.confirm(who, id) {} catch {} }
@@ -588,10 +501,7 @@ contract LookoutEscrowTest {
             else if (op == 3) { vm.prank(who); try escrow.claim() {} catch {} }
             else if (op == 4) { vm.prank(who); try escrow.reclaim(id) {} catch {} }
             else if (op == 5) { vm.prank(RESOLVER); try escrow.payBounty(bytes32(uint256(uint128(id))), payable(STEALTH)) {} catch {} }
-            else if (op == 6) { vm.prank(who); try escrow.stake{value: MIN_STAKE + (seed >> 40) % 3 ether}() {} catch {} }
-            else if (op == 7) { vm.prank(who); try escrow.requestUnstake() {} catch {} }
-            else if (op == 8) { vm.prank(who); try escrow.withdraw() {} catch {} }
-            else if (op == 9) { vm.prank(RESOLVER); try escrow.slash(who, (seed >> 40) % 2 ether) {} catch {} }
+            else if (op == 6) { vm.prank(RESOLVER); try escrow.refund(who, id) {} catch {} }
             else { vm.warp(block.timestamp + ((seed >> 40) % 20 days)); }
 
             solvent();
