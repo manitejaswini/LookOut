@@ -156,3 +156,8 @@ export function reportResult(t: Tally): 'confirmed' | 'rejected' | null {
   if (t.status !== 'ruled') return null;
   return t.outcome === 'block' ? 'confirmed' : 'rejected';
 }
+
+/** caseId = first 16 hex digits of keccak256(targetHash ":" triggerEntityKey) (arkiv/schema.md). Same dispute, same case. */
+export function caseIdFor(targetHash: string, triggerEntityKey: string): string {
+  return toHex(keccak_256(new TextEncoder().encode(`${targetHash.toLowerCase()}:${triggerEntityKey.toLowerCase()}`))).slice(0, 16);
+}
