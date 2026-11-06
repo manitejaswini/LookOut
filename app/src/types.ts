@@ -1,0 +1,48 @@
+export type TargetKind = 'domain' | 'address' | 'contract';
+export type SourceType = 'community' | 'feed' | 'checker' | 'verifier' | 'ruling';
+export type Verdict = 'block' | 'warn' | 'unknown';
+
+export interface Signal {
+  entityId: string;
+  sourceType: SourceType;
+  sourceId: string;
+  level: 'block' | 'warn';
+  weight: number; // 0..1, already reputation-scaled for community reports
+  ageSeconds: number;
+  note: string;
+}
+
+export interface Target {
+  kind: TargetKind;
+  value: string;
+  title: string;
+  blurb: string; // what the mock wallet screen says the user is doing
+  signals: Signal[];
+  disputed: boolean;
+  proof?: string; // re-checkable proof, if any
+  ruling?: 'block' | 'clear';
+}
+
+export interface CheckResult {
+  verdict: Verdict;
+  disputed: boolean;
+  reasons: Pick<Signal, 'sourceType' | 'sourceId' | 'level' | 'entityId' | 'ageSeconds'>[];
+  snapshotId: string;
+  verified: boolean;
+  // extras for the UI
+  headline: string;
+  typeScores: Partial<Record<SourceType, number>>;
+  strongTypes: number;
+}
+
+export type EntityKind =
+  | 'report' | 'verdict' | 'attestation' | 'stake' | 'vote'
+  | 'ruling' | 'reputation' | 'snapshot' | 'bounty';
+
+export interface ArkivEntity {
+  id: string;
+  kind: EntityKind;
+  owner: string;
+  attr: string; // plaintext attributes, shown as on Arkiv
+  expiresAt: number; // epoch ms
+}
