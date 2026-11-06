@@ -9,6 +9,8 @@ const trustedIndexers = (registry.indexers ?? []).map((i) => ({ indexerId: i.ind
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // do not copy browser console output into a log file under the watched project: it can feed a reload loop in dev
+  logging: { browserToTerminal: false },
   // workspace packages are shipped as TypeScript source
   transpilePackages: ['@lookout/core', '@lookout/client', '@lookout/arkiv', '@lookout/pir', '@lookout/worldid', '@lookout/escrow'],
   env: { NEXT_PUBLIC_TRUSTED_INDEXERS: JSON.stringify(trustedIndexers), NEXT_PUBLIC_SOURCES: JSON.stringify(sourceNames) },

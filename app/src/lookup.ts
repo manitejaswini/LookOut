@@ -35,11 +35,27 @@ const sourceNames = JSON.parse(process.env.NEXT_PUBLIC_SOURCES ?? '[]') as strin
  */
 const arkivReadKey = process.env.NEXT_PUBLIC_ARKIV_READ_KEY ?? '';
 
+/**
+ * The Arkiv chain for reads. With no key the SDK prints a warning every time the chain is built, which is deliberate here
+ * (no key means Arkiv cannot tell which visitors check what). The warning is silenced because in development Next forwards
+ * browser console output into a log file inside the watched tree, and a warning on every page load made the page reload itself.
+ */
+function readChain() {
+  if (arkivReadKey) return rabdi({ accessKey: arkivReadKey });
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    return rabdi({ accessKey: '' });
+  } finally {
+    console.warn = warn;
+  }
+}
+
 function publishedRoots() {
   if (verifyOff) return undefined;
   if (manualRoots?.length) return async () => manualRoots;
   if (trusted.length === 0) return undefined;
-  return arkivRootsSource({ publicClient: createPublicClient({ chain: rabdi({ accessKey: arkivReadKey }), transport: http(undefined, { timeout: 10_000, retryCount: 1 }) }), trusted });
+  return arkivRootsSource({ publicClient: createPublicClient({ chain: readChain(), transport: http(undefined, { timeout: 10_000, retryCount: 1 }) }), trusted });
 }
 
 const pirClient = pirA && pirB ? createPirClient({ pairs: [{ a: pirA, b: pirB }], publishedRoots: publishedRoots(), sourceNames }) : null;
