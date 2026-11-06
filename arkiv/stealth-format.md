@@ -110,7 +110,8 @@ This vector was also opened by a separate Python implementation (hand-written se
 
 ## What this hides, and what it does not
 
-- Hides from everyone except the payer: which address received a bounty, and that it belongs to the reporter. Two bounties to the same reporter land on unrelated addresses, and their sealed meta-addresses look unrelated too.
+- Hides from everyone except the payer: which address received a bounty, and that it belongs to the reporter. On the Arkiv side the meta-address is sealed to the payer. On the escrow side `payBounty(bountyId, stealth)` takes no reporter and no report id, its event names only the stealth address, and `bountyId` is derived from the payer's secret (`bountyIdFor` in `packages/stealth`), so it cannot be recomputed from a public report. An earlier version of the contract took the reporter and report id as arguments, which published exactly the link this format exists to hide. It was replaced.
+- Does **not** hide timing: a bounty is paid soon after a confirmation, and with few reports an observer can guess the match. This hides the link from casual analysis, not from a determined observer watching the chain. Two bounties to the same reporter land on unrelated addresses, and their sealed meta-addresses look unrelated too.
 - Does **not** hide from the payer. It opens the meta-address and computes the address, so it knows which report paid which address. The payer is trusted for this, the same as any bounty payer.
 - Does **not** hide: that report `X` was rewarded, the tier, the payer, or the time. The payer funds the stealth address, so payer to stealth address is on chain by design.
 - Reputation ties reports to the reporter's wallet. Payouts can be hidden, earned reputation cannot (PRD, "Reputation versus privacy").

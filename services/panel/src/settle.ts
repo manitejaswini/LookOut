@@ -1,7 +1,7 @@
 import { createBounty, createRuling, type EntityWriter } from '@lookout/arkiv';
 import { reportResult, repEventFromSettlement, type RepEvent, type Tally, type TargetKind } from '@lookout/core';
 import type { Escrow } from '@lookout/escrow';
-import { createPayment, ephemeralFor } from '@lookout/stealth';
+import { bountyIdFor, createPayment, ephemeralFor } from '@lookout/stealth';
 import type { Journal } from './journal.ts';
 
 /**
@@ -19,7 +19,7 @@ import type { Journal } from './journal.ts';
 export interface SettleDeps {
   /** writes the ruling. Must be the panel wallet, because indexers trust `ruling` only from there */
   arkiv: EntityWriter;
-  escrow: Pick<Escrow, 'confirm' | 'reject' | 'slash' | 'payBounty' | 'deposit'>;
+  escrow: Pick<Escrow, 'confirm' | 'reject' | 'slash' | 'payBounty' | 'bountyPaid' | 'deposit'>;
   journal: Journal;
   /** derives each report's one-time bounty address, so a retry can never pay a second address */
   stealthPayerSecret: Uint8Array;
@@ -106,12 +106,14 @@ export async function settleReportCase(deps: SettleDeps, c: ReportCase, t: Tally
   // 4. the bounty, to a one-time stealth address, only for a confirmed report
   if (result === 'confirmed' && c.reporterMeta) {
     await step('bounty', async () => {
+      // the escrow knows this bounty only by an opaque id that nobody else can derive, so no payment can be tied to a report on chain
+      const bountyId = bountyIdFor(deps.stealthPayerSecret, c.reportId);
       // paid by an earlier run that crashed before journaling: nothing to do (the contract would refuse a second payment anyway)
-      if ((await deps.escrow.deposit(c.reporter, c.reportId)).bountyPaid) return 'already paid';
+      if (await deps.escrow.bountyPaid(bountyId)) return 'already paid';
       const pay = createPayment(c.reporterMeta!, ephemeralFor(deps.stealthPayerSecret, c.reportId));
       // announce first: if the payment then fails the announcement is harmless and the retry reuses the same address
       await createBounty(deps.arkiv, { reportId: c.reportId, amountTier: deps.bountyTier, ephemeralPublicKey: pay.ephemeralPublicKey });
-      const tx = await deps.escrow.payBounty(c.reporter, c.reportId, pay.stealthAddress);
+      const tx = await deps.escrow.payBounty(bountyId, pay.stealthAddress);
       return tx.hash;
     });
   }

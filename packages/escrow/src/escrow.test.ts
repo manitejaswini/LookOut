@@ -5,7 +5,8 @@ import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { parseEther } from 'viem';
+import { keccak256, parseEther, parseEventLogs, toHex } from 'viem';
+import { escrowAbi } from './artifact.ts';
 import { anvilAvailable, startLocalChain, type LocalChain } from './anvil.ts';
 import { createEscrow, deployEscrow, EscrowError, explain, fromBytes16, toBytes16, type Escrow } from './client.ts';
 
@@ -27,6 +28,8 @@ let address: `0x${string}`;
 
 const as = (who: LocalChain['accounts'][number]): Escrow => createEscrow({ address, publicClient: chain.publicClient, walletClient: who.wallet });
 const id = (n: number) => n.toString(16).padStart(32, '0');
+// the resolver derives these from a secret, so they cannot be recomputed from a public report
+const bid = (n: number) => keccak256(toHex(`bounty-${n}`));
 const refusal = (code: string) => (e: unknown) => e instanceof EscrowError && e.code === code;
 
 before(async () => {
@@ -91,10 +94,21 @@ test('LIFECYCLE: deposit, see the event, confirm, claim the refund, and be paid 
   assert.ok(gained <= DEPOSIT && DEPOSIT - gained < parseEther('0.001'), `the refund arrived, less a small gas cost (gained ${gained})`);
 
   // and the bounty goes to a stealth address, once
-  await r.payBounty(alice.address, id(1), stealth.address);
+  await r.payBounty(bid(1), stealth.address);
   assert.equal(await chain.publicClient.getBalance({ address: stealth.address }), parseEther('10000') + BOUNTY);
-  assert.equal((await a.deposit(alice.address, id(1))).bountyPaid, true);
-  await assert.rejects(r.payBounty(alice.address, id(1), stealth.address), refusal('AlreadyPaid'));
+  assert.equal(await a.bountyPaid(bid(1)), true);
+  await assert.rejects(r.payBounty(bid(1), stealth.address), refusal('AlreadyPaid'));
+
+  // PRIVACY: nothing on chain names the reporter or the report when a bounty is paid
+  const logs = await chain.publicClient.getLogs({ address, fromBlock: 0n });
+  const paid = parseEventLogs({ abi: escrowAbi, logs, eventName: 'BountyPaid' });
+  assert.equal(paid.length, 1);
+  assert.deepEqual(Object.keys(paid[0].args).sort(), ['amount', 'stealth'], 'the event carries only the stealth address and the amount');
+  const payTx = await chain.publicClient.getTransaction({ hash: paid[0].transactionHash });
+  assert.ok(!payTx.input.toLowerCase().includes(alice.address.slice(2).toLowerCase()), 'the call data does not contain the reporter address');
+  assert.ok(!payTx.input.toLowerCase().includes(id(1)), 'and does not contain the report id');
+  const counts = await a.bountyCounts();
+  assert.equal(counts.paid <= counts.confirmed, true, 'never more bounties than confirmations');
 });
 
 test('ACCOUNTING: the escrow always holds exactly what it owes, checked against the chain itself', { skip }, async () => {
@@ -114,8 +128,8 @@ test('the contract\'s own error names come through, and nothing is sent when the
   await assert.rejects(a.confirm(alice.address, id(10)), refusal('NotResolver'));
   await assert.rejects(a.claim(), refusal('NothingToClaim'));
   await assert.rejects(r.confirm(alice.address, id(99)), refusal('NotLocked'));
-  await assert.rejects(r.payBounty(alice.address, id(10), stealth.address), refusal('NotConfirmed'));
-  await assert.rejects(r.payBounty(alice.address, id(10), '0x0000000000000000000000000000000000000000'), refusal('ZeroAddress'), 'the destination is checked first');
+  await assert.rejects(r.payBounty(bid(10), stealth.address), refusal('NotConfirmed'));
+  await assert.rejects(r.payBounty(bid(10), '0x0000000000000000000000000000000000000000'), refusal('ZeroAddress'), 'the destination is checked first');
   await assert.rejects(a.slash(bob.address, 1n), refusal('NotResolver'));
 
   // every refused call above was caught by the simulation, so no gas was spent on any of them
@@ -131,7 +145,7 @@ test('RECLAIM: a reporter can take the deposit back only after the window, and t
   await a.reclaim(id(20));
   assert.equal((await a.deposit(alice.address, id(20))).status, 'reclaimed');
   await assert.rejects(r.confirm(alice.address, id(20)), refusal('NotLocked'));
-  await assert.rejects(r.payBounty(alice.address, id(20), stealth.address), refusal('NotConfirmed'));
+  await assert.rejects(r.payBounty(bid(20), stealth.address), refusal('NotConfirmed'));
   await a.claim();
 });
 

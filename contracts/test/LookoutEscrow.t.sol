@@ -43,12 +43,11 @@ contract RefusesEth {
 /// A resolver that is also the recipient and tries to call payBounty again from inside the payment.
 contract ReenteringResolver {
     LookoutEscrow public escrow;
-    address public reporter;
-    bytes16 public reportId;
+    bytes32 public bountyId;
 
-    function set(LookoutEscrow e, address r, bytes16 id) external { escrow = e; reporter = r; reportId = id; }
-    function pay(address payable stealth) external { escrow.payBounty(reporter, reportId, stealth); }
-    receive() external payable { escrow.payBounty(reporter, reportId, payable(address(this))); }
+    function set(LookoutEscrow e, bytes32 id) external { escrow = e; bountyId = id; }
+    function pay(address payable stealth) external { escrow.payBounty(bountyId, stealth); }
+    receive() external payable { escrow.payBounty(bountyId, payable(address(this))); }
 }
 
 contract LookoutEscrowTest {
@@ -69,6 +68,9 @@ contract LookoutEscrowTest {
 
     bytes16 constant ID1 = bytes16(0x0123456789abcdef0123456789abcdef);
     bytes16 constant ID2 = bytes16(0xfedcba9876543210fedcba9876543210);
+    // opaque bounty ids, as the resolver derives them from a secret
+    bytes32 constant BID1 = keccak256("bounty-1");
+    bytes32 constant BID2 = keccak256("bounty-2");
 
     LookoutEscrow escrow;
 
@@ -88,11 +90,7 @@ contract LookoutEscrowTest {
     function yes(bool c, string memory what) internal pure { require(c, what); }
 
     function status(address reporter, bytes16 id) internal view returns (LookoutEscrow.Status s) {
-        (, s, , ) = escrow.deposits(escrow.depositKey(reporter, id));
-    }
-
-    function bountyPaid(address reporter, bytes16 id) internal view returns (bool paid) {
-        (, , , paid) = escrow.deposits(escrow.depositKey(reporter, id));
+        (, s, ) = escrow.deposits(escrow.depositKey(reporter, id));
     }
 
     function deposit(address who, bytes16 id) internal {
@@ -188,7 +186,7 @@ contract LookoutEscrowTest {
         escrow.slash(ALICE, 1);
         vm.prank(ATTACKER);
         vm.expectRevert(LookoutEscrow.NotResolver.selector);
-        escrow.payBounty(ALICE, ID1, payable(ATTACKER));
+        escrow.payBounty(BID1, payable(ATTACKER));
     }
 
     function test_aDepositResolvesOnceOnly() public {
@@ -232,32 +230,52 @@ contract LookoutEscrowTest {
         deposit(ALICE, ID1);
         vm.startPrank(RESOLVER);
         escrow.confirm(ALICE, ID1);
-        escrow.payBounty(ALICE, ID1, payable(STEALTH));
+        escrow.payBounty(BID1, payable(STEALTH));
         vm.stopPrank();
         eq(STEALTH.balance, BOUNTY, "stealth address received the bounty");
         eq(escrow.bountyPool(), DEPOSIT - BOUNTY, "pool paid it");
-        yes(bountyPaid(ALICE, ID1), "marked paid");
+        yes(escrow.bountyPaid(BID1), "marked paid");
+        eq(escrow.bountiesPaid(), 1, "one bounty counted");
         solvent();
 
         vm.prank(RESOLVER);
         vm.expectRevert(LookoutEscrow.AlreadyPaid.selector);
-        escrow.payBounty(ALICE, ID1, payable(STEALTH));
+        escrow.payBounty(BID1, payable(STEALTH));
         eq(STEALTH.balance, BOUNTY, "still only one payment");
     }
 
-    function test_noBountyForALockedRejectedOrUnknownReport() public {
+    function test_theResolverCannotPayMoreBountiesThanThereAreConfirmedReports() public {
+        fundPool();
+        deposit(ALICE, ID1);
+        deposit(BOB, ID2);
+        vm.startPrank(RESOLVER);
+        escrow.confirm(ALICE, ID1);
+        escrow.payBounty(BID1, payable(STEALTH));
+        // a different opaque id does not get a second bounty for the same single confirmation
+        vm.expectRevert(LookoutEscrow.NotConfirmed.selector);
+        escrow.payBounty(BID2, payable(STEALTH));
+        // a second confirmation earns a second bounty
+        escrow.confirm(BOB, ID2);
+        escrow.payBounty(BID2, payable(STEALTH));
+        vm.stopPrank();
+        eq(STEALTH.balance, 2 * BOUNTY, "two confirmations, two bounties");
+        eq(escrow.confirmedCount(), 2, "confirmations counted");
+        eq(escrow.bountiesPaid(), 2, "bounties counted");
+        solvent();
+    }
+
+    function test_noBountyWithoutAConfirmedReport() public {
         fundPool();
         deposit(ALICE, ID1);
         vm.startPrank(RESOLVER);
         vm.expectRevert(LookoutEscrow.NotConfirmed.selector);
-        escrow.payBounty(ALICE, ID1, payable(STEALTH)); // still locked
+        escrow.payBounty(BID1, payable(STEALTH)); // nothing confirmed yet, the deposit is only locked
         escrow.reject(ALICE, ID1);
         vm.expectRevert(LookoutEscrow.NotConfirmed.selector);
-        escrow.payBounty(ALICE, ID1, payable(STEALTH)); // rejected
-        vm.expectRevert(LookoutEscrow.NotConfirmed.selector);
-        escrow.payBounty(BOB, ID1, payable(STEALTH)); // never existed
+        escrow.payBounty(BID1, payable(STEALTH)); // a rejection earns no bounty
         vm.stopPrank();
         eq(STEALTH.balance, 0, "nothing paid");
+        eq(escrow.bountiesPaid(), 0, "none counted");
     }
 
     function test_theBountyNeedsAFundedPoolAndTheResolverCannotMintMoney() public {
@@ -265,7 +283,7 @@ contract LookoutEscrowTest {
         vm.startPrank(RESOLVER);
         escrow.confirm(ALICE, ID1);
         vm.expectRevert(LookoutEscrow.PoolTooSmall.selector);
-        escrow.payBounty(ALICE, ID1, payable(STEALTH));
+        escrow.payBounty(BID1, payable(STEALTH));
         vm.stopPrank();
         // the reporter's own refund is untouched by the empty pool
         eq(escrow.claimable(ALICE), DEPOSIT, "refund intact");
@@ -274,7 +292,7 @@ contract LookoutEscrowTest {
         yes(ok, "plain transfer accepted");
         eq(escrow.bountyPool(), BOUNTY, "pool funded");
         vm.prank(RESOLVER);
-        escrow.payBounty(ALICE, ID1, payable(STEALTH));
+        escrow.payBounty(BID1, payable(STEALTH));
         eq(STEALTH.balance, BOUNTY, "paid");
         solvent();
     }
@@ -285,7 +303,7 @@ contract LookoutEscrowTest {
         vm.startPrank(RESOLVER);
         escrow.confirm(ALICE, ID1);
         vm.expectRevert(LookoutEscrow.ZeroAddress.selector);
-        escrow.payBounty(ALICE, ID1, payable(address(0)));
+        escrow.payBounty(BID1, payable(address(0)));
         vm.stopPrank();
     }
 
@@ -296,12 +314,13 @@ contract LookoutEscrowTest {
         vm.startPrank(RESOLVER);
         escrow.confirm(ALICE, ID1);
         vm.expectRevert(LookoutEscrow.TransferFailed.selector);
-        escrow.payBounty(ALICE, ID1, payable(address(bad)));
+        escrow.payBounty(BID1, payable(address(bad)));
         vm.stopPrank();
-        yes(!bountyPaid(ALICE, ID1), "state rolled back: not marked paid");
+        yes(!escrow.bountyPaid(BID1), "state rolled back: not marked paid");
+        eq(escrow.bountiesPaid(), 0, "state rolled back: not counted");
         eq(escrow.bountyPool(), DEPOSIT, "pool untouched");
         vm.prank(RESOLVER);
-        escrow.payBounty(ALICE, ID1, payable(STEALTH));
+        escrow.payBounty(BID1, payable(STEALTH));
         eq(STEALTH.balance, BOUNTY, "retry to a good address works");
     }
 
@@ -327,7 +346,7 @@ contract LookoutEscrowTest {
         vm.prank(CAROL);
         e2.deposit{value: DEPOSIT}(ID2);
         // reject CAROL to fund e2's pool, confirm ALICE, then pay the bounty to the resolver contract itself
-        r.set(e2, ALICE, ID1);
+        r.set(e2, BID1);
         vm.startPrank(address(r));
         e2.reject(CAROL, ID2);
         e2.confirm(ALICE, ID1);
@@ -366,7 +385,7 @@ contract LookoutEscrowTest {
         vm.expectRevert(LookoutEscrow.NotLocked.selector);
         escrow.reject(ALICE, ID1);
         vm.expectRevert(LookoutEscrow.NotConfirmed.selector);
-        escrow.payBounty(ALICE, ID1, payable(STEALTH));
+        escrow.payBounty(BID1, payable(STEALTH));
         vm.stopPrank();
     }
 
@@ -568,7 +587,7 @@ contract LookoutEscrowTest {
             else if (op == 2) { vm.prank(RESOLVER); try escrow.reject(who, id) {} catch {} }
             else if (op == 3) { vm.prank(who); try escrow.claim() {} catch {} }
             else if (op == 4) { vm.prank(who); try escrow.reclaim(id) {} catch {} }
-            else if (op == 5) { vm.prank(RESOLVER); try escrow.payBounty(who, id, payable(STEALTH)) {} catch {} }
+            else if (op == 5) { vm.prank(RESOLVER); try escrow.payBounty(bytes32(uint256(uint128(id))), payable(STEALTH)) {} catch {} }
             else if (op == 6) { vm.prank(who); try escrow.stake{value: MIN_STAKE + (seed >> 40) % 3 ether}() {} catch {} }
             else if (op == 7) { vm.prank(who); try escrow.requestUnstake() {} catch {} }
             else if (op == 8) { vm.prank(who); try escrow.withdraw() {} catch {} }
@@ -576,6 +595,7 @@ contract LookoutEscrowTest {
             else { vm.warp(block.timestamp + ((seed >> 40) % 20 days)); }
 
             solvent();
+            yes(escrow.bountiesPaid() <= escrow.confirmedCount(), "never more bounties than confirmations");
         }
     }
 }

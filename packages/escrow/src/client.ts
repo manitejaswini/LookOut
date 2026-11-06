@@ -127,6 +127,11 @@ export function createEscrow(deps: EscrowDeps) {
     return { resolver, depositWei, bountyWei, minReviewerStake, unstakeDelay: BigInt(unstakeDelay), resolveWindow: BigInt(resolveWindow) };
   }
 
+  const checkedBytes32 = (h: string): Hex => {
+    if (!/^0x[0-9a-fA-F]{64}$/.test(h)) throw new EscrowError('Unknown', 'a bounty id is 0x followed by 64 hex digits');
+    return h.toLowerCase() as Hex;
+  };
+
   const checked = (a: string): Address => {
     if (!isAddress(a)) throw new EscrowError('ZeroAddress', `not an address: ${a}`);
     return getAddress(a);
@@ -137,11 +142,14 @@ export function createEscrow(deps: EscrowDeps) {
     config,
 
     /* ----- reads ----- */
-    async deposit(reporter: string, reportId: string): Promise<{ status: DepositStatus; lockedAt: bigint; bountyPaid: boolean }> {
+    async deposit(reporter: string, reportId: string): Promise<{ status: DepositStatus; lockedAt: bigint }> {
       const key = await read<Hex>('depositKey', [checked(reporter), toBytes16(reportId)]);
-      const [, status, lockedAt, bountyPaid] = await read<readonly [Address, number, bigint, boolean]>('deposits', [key]);
-      return { status: STATUS[status] ?? 'none', lockedAt: BigInt(lockedAt), bountyPaid };
+      const [, status, lockedAt] = await read<readonly [Address, number, bigint]>('deposits', [key]);
+      return { status: STATUS[status] ?? 'none', lockedAt: BigInt(lockedAt) };
     },
+    /** Has this opaque bounty id been paid? (The id is derived by the resolver from a secret, see bountyId().) */
+    bountyPaid: (bountyId: string) => read<boolean>('bountyPaid', [checkedBytes32(bountyId)]),
+    bountyCounts: async () => ({ confirmed: await read<bigint>('confirmedCount'), paid: await read<bigint>('bountiesPaid') }),
     claimable: (who: string) => read<bigint>('claimable', [checked(who)]),
     bountyPool: () => read<bigint>('bountyPool'),
     totals: async () => ({
@@ -166,7 +174,8 @@ export function createEscrow(deps: EscrowDeps) {
     /* ----- resolver (the panel service's wallet) ----- */
     confirm: (reporter: string, reportId: string) => send('confirm', [checked(reporter), toBytes16(reportId)]),
     reject: (reporter: string, reportId: string) => send('reject', [checked(reporter), toBytes16(reportId)]),
-    payBounty: (reporter: string, reportId: string, stealth: string) => send('payBounty', [checked(reporter), toBytes16(reportId), checked(stealth)]),
+    /** Takes no reporter and no report id on purpose: nothing public links a bounty to a report. */
+    payBounty: (bountyId: string, stealth: string) => send('payBounty', [checkedBytes32(bountyId), checked(stealth)]),
     slash: (reviewer: string, amountWei: bigint) => send('slash', [checked(reviewer), amountWei]),
 
     /* ----- reviewers ----- */

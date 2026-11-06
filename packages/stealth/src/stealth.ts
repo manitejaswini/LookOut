@@ -76,6 +76,15 @@ export function ephemeralFor(payerSecret: Uint8Array, reportId: string): Uint8Ar
   return toBytes32(r);
 }
 
+/**
+ * The opaque id the escrow records a bounty under (`payBounty(bountyId, stealth)`). It is derived from the payer's secret, so
+ * nobody else can compute it from a public report id, and the on-chain payment cannot be tied back to a report. The payer can
+ * always recompute it, which makes a retry idempotent: the same report always maps to the same id, and the contract refuses a second payment.
+ */
+export function bountyIdFor(payerSecret: Uint8Array, reportId: string): string {
+  return `0x${bytesToHex(keccak_256(concatBytes(payerSecret, utf8ToBytes(`${SCHEME}:bounty-id:${reportId}`))))}`;
+}
+
 export interface Payment {
   stealthAddress: string; // lowercase, where the ETH goes
   ephemeralPublicKey: string; // 0x + 33 bytes hex. This is the `bounty` entity payload.

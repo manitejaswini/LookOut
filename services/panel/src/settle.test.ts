@@ -5,7 +5,7 @@ import { parseEther } from 'viem';
 import { commitVote, drawJurors, tally, type Candidate, type Reveal, type VoteOutcome } from '@lookout/core';
 import { createEscrow, deployEscrow, type Escrow } from '@lookout/escrow';
 import { anvilAvailable, startLocalChain, type LocalChain } from '../../../packages/escrow/src/anvil.ts';
-import { generateKeys, metaAddress, stealthAddressFor } from '@lookout/stealth';
+import { bountyIdFor, generateKeys, metaAddress, stealthAddressFor } from '@lookout/stealth';
 import { memoryJournal } from './journal.ts';
 import { rulingPayload, settleReportCase, type ReportCase, type SettleDeps } from './settle.ts';
 
@@ -16,6 +16,8 @@ const MIN_STAKE = parseEther('1');
 const SLASH_LOSER = parseEther('0.1');
 const SLASH_NOREVEAL = parseEther('0.3');
 const SALT = 'ab'.repeat(16);
+const PAYER_SECRET = new Uint8Array(32).fill(7);
+const paid = (c: ReportCase) => as(0).bountyPaid(bountyIdFor(PAYER_SECRET, c.reportId));
 
 let chain: LocalChain;
 let address: `0x${string}`;
@@ -51,7 +53,7 @@ function recorder() {
 }
 
 function deps(rec: ReturnType<typeof recorder>, journal = memoryJournal()): SettleDeps {
-  return { arkiv: rec.writer, escrow: as(0), journal, stealthPayerSecret: new Uint8Array(32).fill(7), now: () => 1_700_000_000, slashLoserWei: SLASH_LOSER, slashNonRevealWei: SLASH_NOREVEAL, bountyTier: 3 };
+  return { arkiv: rec.writer, escrow: as(0), journal, stealthPayerSecret: PAYER_SECRET, now: () => 1_700_000_000, slashLoserWei: SLASH_LOSER, slashNonRevealWei: SLASH_NOREVEAL, bountyTier: 3 };
 }
 
 function theCase(n: number, meta?: string): ReportCase {
@@ -84,7 +86,7 @@ test('CONFIRMED: ruling published, deposit returned, loser and non-revealer slas
   assert.equal(r.status, 'settled');
   assert.equal(r.result, 'confirmed');
   assert.equal((await as(1).deposit(acct(1).address, c.reportId)).status, 'returned');
-  assert.equal((await as(1).deposit(acct(1).address, c.reportId)).bountyPaid, true);
+  assert.equal(await paid(c), true);
 
   // the loser was slashed, the winners were not
   assert.equal((await as(0).stakeOf(acct(4).address)).amount, parseEther('2') - SLASH_LOSER);
@@ -151,7 +153,7 @@ test('REJECTED: the deposit goes to the pool, no bounty, the reporter loses repu
   const r = await settleReportCase(deps(rec), c, votes(c, ['clear', 'clear', 'block']));
   assert.equal(r.result, 'rejected');
   assert.equal((await as(0).deposit(acct(1).address, c.reportId)).status, 'slashed');
-  assert.equal((await as(0).deposit(acct(1).address, c.reportId)).bountyPaid, false);
+  assert.equal(await paid(c), false);
   assert.ok((await as(0).bountyPool()) >= poolBefore + DEPOSIT);
   assert.equal(rec.created.length, 1, 'only the ruling, no bounty announcement');
   assert.ok(r.repEvents.some((e) => e.kind === 'report_rejected'));
@@ -174,7 +176,7 @@ test('a confirmed report with no stealth address gets its deposit back but no bo
   const rec = recorder();
   await settleReportCase(deps(rec), c, votes(c, ['block', 'block', 'block']));
   assert.equal((await as(0).deposit(acct(1).address, c.reportId)).status, 'returned');
-  assert.equal((await as(0).deposit(acct(1).address, c.reportId)).bountyPaid, false);
+  assert.equal(await paid(c), false);
 });
 
 test('the draw feeds the settlement: jurors drawn from the pool are the ones judged', { skip }, async () => {

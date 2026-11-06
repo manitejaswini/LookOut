@@ -18,7 +18,7 @@ export default async function ReportPage({ searchParams }: { searchParams: Promi
             <p className="mono-label">Reporters</p>
             <p className="lede-sm">
               Anyone can report. A small deposit goes into escrow, so spam costs money. If the panel confirms your report you get the deposit back,
-              earn reputation, and may be paid a bounty to a one-time address that nobody can link to you. If it is rejected, the deposit funds the bounty pool.
+              earn reputation, and may be paid a bounty to a one-time address. The payment on chain does not name you or your report, though timing can still hint at a link. If it is rejected, the deposit funds the bounty pool.
             </p>
             <ul className="why-list">
               <li><b>Reports alone never block.</b> A new wallet weighs nothing. Blocking needs independent strong signals or a panel ruling.</li>

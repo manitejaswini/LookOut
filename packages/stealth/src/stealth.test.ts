@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js';
 import {
-  addressFromPrivateKey, checksumAddress, createPayment, ephemeralFor, generateKeys, metaAddress,
+  addressFromPrivateKey, bountyIdFor, checksumAddress, createPayment, ephemeralFor, generateKeys, metaAddress,
   parseMetaAddress, stealthAddressFor, stealthPrivateKey, sweepValue,
 } from './stealth.ts';
 
@@ -81,4 +81,12 @@ test('sweep: the stealth address pays its own gas', () => {
   assert.equal(sweepValue(1_000_000_000_000_000n, 10_000_000_000n), 1_000_000_000_000_000n - 210_000_000_000_000n);
   assert.equal(sweepValue(100n, 10_000_000_000n), null);
   assert.equal(sweepValue(210_000_000_000_000n, 10_000_000_000n), null);
+});
+
+test('the bounty id is 32 bytes, stable per report, different per report and per payer, and not guessable from the report id', () => {
+  const a = bountyIdFor(PAYER, 'rep_0001');
+  assert.match(a, /^0x[0-9a-f]{64}$/);
+  assert.equal(a, bountyIdFor(PAYER, 'rep_0001'));
+  assert.notEqual(a, bountyIdFor(PAYER, 'rep_0002'));
+  assert.notEqual(a, bountyIdFor(new Uint8Array(32).fill(9), 'rep_0001'));
 });

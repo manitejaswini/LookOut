@@ -35,7 +35,6 @@ contract LookoutEscrow {
         address reporter;
         Status status;
         uint64 lockedAt;
-        bool bountyPaid;
     }
 
     /// @dev keyed by depositKey(reporter, reportId), so nobody can squat another reporter's report id
@@ -48,6 +47,14 @@ contract LookoutEscrow {
 
     mapping(address => Stake) public stakes;
     mapping(address => uint256) public claimable;
+
+    /// @notice bounties already paid, by an OPAQUE id the resolver derives from a secret. The id is deliberately not
+    /// the deposit key: if it were, anyone could compute it from a public report and link the stealth address to the reporter.
+    mapping(bytes32 => bool) public bountyPaid;
+    /// @notice how many reports were confirmed, and how many bounties were paid. A bounty can never be paid unless a
+    /// confirmation is still unrewarded, so the resolver cannot pay more bounties than there were confirmed reports.
+    uint256 public confirmedCount;
+    uint256 public bountiesPaid;
 
     uint256 public bountyPool;
     uint256 public totalLocked;
@@ -63,7 +70,7 @@ contract LookoutEscrow {
     event Rejected(bytes32 indexed key, address indexed reporter, bytes16 reportId, uint256 forfeited);
     event Reclaimed(bytes32 indexed key, address indexed reporter, bytes16 reportId);
     event Claimed(address indexed to, uint256 amount);
-    event BountyPaid(bytes32 indexed key, address indexed stealth, uint256 amount);
+    event BountyPaid(address indexed stealth, uint256 amount);
     event PoolFunded(address indexed from, uint256 amount);
     event Staked(address indexed reviewer, uint256 added, uint256 total);
     event UnstakeRequested(address indexed reviewer, uint64 unlockAt);
@@ -134,7 +141,7 @@ contract LookoutEscrow {
         if (deposits[key].status != Status.None) revert AlreadyExists();
         // a block timestamp fits in 64 bits for the next 500 billion years
         // forge-lint: disable-next-line(unsafe-typecast)
-        deposits[key] = Deposit({reporter: msg.sender, status: Status.Locked, lockedAt: uint64(block.timestamp), bountyPaid: false});
+        deposits[key] = Deposit({reporter: msg.sender, status: Status.Locked, lockedAt: uint64(block.timestamp)});
         totalLocked += msg.value;
         emit Deposited(key, msg.sender, reportId, msg.value);
     }
@@ -144,6 +151,7 @@ contract LookoutEscrow {
         (bytes32 key, Deposit storage d) = _locked(reporter, reportId);
         d.status = Status.Returned;
         totalLocked -= depositWei;
+        confirmedCount += 1;
         _credit(reporter, depositWei);
         emit Confirmed(key, reporter, reportId);
     }
@@ -181,17 +189,25 @@ contract LookoutEscrow {
         _send(msg.sender, amount);
     }
 
-    /// @notice Pay the bounty for a CONFIRMED report to a one-time stealth address, once. The payment comes out of the pool.
-    function payBounty(address reporter, bytes16 reportId, address payable stealth) external nonReentrant onlyResolver {
+    /// @notice Pay one bounty from the pool to a one-time stealth address.
+    ///
+    /// PRIVACY: this takes NO reporter and NO report id, and its event names only the stealth address. Everything an
+    /// observer can see on chain is "the pool paid some address", not "this reporter's report was rewarded". Which report
+    /// a bounty belongs to is known only to the resolver, which derives `bountyId` from a secret (so it cannot be recomputed
+    /// from public data). What stays visible: the amount, the time, and that it follows a confirmation. With few reports,
+    /// timing alone can still hint at the link, so this hides the link from casual analysis and not from a determined observer.
+    ///
+    /// LIMITS on the resolver, since it no longer names a report here: one payment per `bountyId`, never more payments than
+    /// confirmed reports, and never more than the pool holds. It still chooses WHO is paid, which is the trust it already has.
+    function payBounty(bytes32 bountyId, address payable stealth) external nonReentrant onlyResolver {
         if (stealth == address(0)) revert ZeroAddress();
-        bytes32 key = depositKey(reporter, reportId);
-        Deposit storage d = deposits[key];
-        if (d.status != Status.Returned) revert NotConfirmed();
-        if (d.bountyPaid) revert AlreadyPaid();
+        if (bountyPaid[bountyId]) revert AlreadyPaid();
+        if (bountiesPaid >= confirmedCount) revert NotConfirmed();
         if (bountyPool < bountyWei) revert PoolTooSmall();
-        d.bountyPaid = true;
+        bountyPaid[bountyId] = true;
+        bountiesPaid += 1;
         bountyPool -= bountyWei;
-        emit BountyPaid(key, stealth, bountyWei);
+        emit BountyPaid(stealth, bountyWei);
         _send(stealth, bountyWei);
     }
 
