@@ -30,6 +30,7 @@
     "demo:jurors": "node scripts/demo-jurors.mjs",
     "operator:run": "node services/operator/src/cli.ts",
     "operator": "node services/operator/src/cli.ts",
-    "e2e:live": "node scripts/e2e-live.mjs"
+    "e2e:live": "node scripts/e2e-live.mjs",
+    "demo:flag": "node scripts/demo-flag.mjs"
   }
 }
