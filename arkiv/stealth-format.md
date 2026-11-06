@@ -78,13 +78,40 @@ Inputs are `keccak256` of the ASCII label.
 
 Sanity check for the address function itself: private key `1` controls `0x7e5f4552091a69125d5dfcb7b8c2659029395bdf`.
 
-## Encrypting the meta-address in the report (Proposed, not implemented)
+## Sealing the meta-address in the report
 
-The report `payload` must not leak the meta-address, or anyone could link a reporter's reports and watch their payouts. Only the payer needs it. Proposal: encrypt to the payer wallet's secp256k1 public key with ECIES (ephemeral ECDH, HKDF-SHA256, ChaCha20-Poly1305), `payload = ephemeralPub || nonce || ciphertext`. This is a separate task: `packages/stealth` does the key math only.
+The report `payload` is public. If it held the meta-address in clear, anyone could link a reporter's reports and watch their payouts. Only the payer needs the meta-address, so the reporter seals it to the payer. Implemented in `packages/stealth/src/seal.ts`.
+
+```
+blob = 0x01 || ephemeralPub (33) || nonce (12) || ciphertext (66) || tag (16)        // 128 bytes
+key  = HKDF-SHA256( ECDH(ephemeralSecret, payerEncryptionKey), salt = none, info = "lookout-stealth-v0:seal-key", 32 bytes )
+ciphertext||tag = ChaCha20-Poly1305( key, nonce, plaintext = K_s || K_v (66 bytes), aad = "lookout-stealth-v0:seal:" + reportId )
+```
+
+- ECDH output is the 33-byte compressed shared point. The reporter makes a **fresh ephemeral key and a random nonce for every report**, so two reports from one reporter look unrelated.
+- `reportId` is the associated data, so a blob copied onto another report fails to open, and any changed byte fails authentication.
+- Opening needs the payer's encryption secret. It throws on a wrong key, a wrong report, a tampered blob, an unknown version byte or a wrong length, and never returns something that is not a valid meta-address.
+- **`payerEncryptionKey`** is a dedicated secp256k1 public key for the payer, **not** the wallet key that signs `bounty` entities. It must be published in the trusted-writers config next to the payer wallet address. This is a new config field, and the README writer-wallet table should list it.
+- Where the blob sits inside the report `payload` (next to the evidence pointer) is Dev A's call in `schema.md`. The blob is fixed-length with a version byte, so a simple concatenation is unambiguous.
+
+### Sealing test vector
+
+| Item | Value |
+| --- | --- |
+| payer encryption secret | `keccak256("lookout test payer encryption key")`: `9f6831b8ddacef39664f0a65e15d26851b73c69ce0a6a6fca029b3a09c86d7a8` |
+| payer encryption key | `0x03a73c5ad494ceaf0371f7899430ee89acf5e971f65ddae6470c6291b9da8cc061` |
+| plaintext | the meta-address in the vectors above |
+| `reportId` | `rep_0001` |
+| ephemeral secret | `keccak256("lookout test seal ephemeral")`: `a4cf00c2e62ceb34db2582e32b146ad5601f2a4c601172e16d38776f3cacda39` |
+| nonce | 12 bytes of `0x07` |
+| blob | `0103b22c9307814a8089db73393e50c3b7afa0412b3f4d3904943ccb4375ea563ae3070707070707070707070707a87547adde35070f9bba75e47e9a728364c74bdbb739e70dfec5ea78b9b61b0a17c2f8fa1bc66a6bbe320b380d339ab1052790308831e1af960f9ae4397cec5252f689231c0ec62f7158c5533d747f0c4adb` |
+
+This vector was also opened by a separate Python implementation (hand-written secp256k1 plus the `cryptography` library's HKDF and ChaCha20-Poly1305), so the format does not depend on the noble libraries.
 
 ## What this hides, and what it does not
 
-- Hides: which address received a bounty, and that it belongs to the reporter. Two bounties to the same reporter land on unrelated addresses.
+- Hides from everyone except the payer: which address received a bounty, and that it belongs to the reporter. Two bounties to the same reporter land on unrelated addresses, and their sealed meta-addresses look unrelated too.
+- Does **not** hide from the payer. It opens the meta-address and computes the address, so it knows which report paid which address. The payer is trusted for this, the same as any bounty payer.
 - Does **not** hide: that report `X` was rewarded, the tier, the payer, or the time. The payer funds the stealth address, so payer to stealth address is on chain by design.
 - Reputation ties reports to the reporter's wallet. Payouts can be hidden, earned reputation cannot (PRD, "Reputation versus privacy").
 - Sweeping to an address linked to the reporter's main wallet undoes the privacy. The client should insist on a fresh destination.
