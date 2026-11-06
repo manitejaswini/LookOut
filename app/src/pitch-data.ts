@@ -109,20 +109,45 @@ export const EF = {
     ['Stealth payout', 'Bounty to a one-time address in ETH. No relayer, no gas link', 'ef', 'EF · Stealth'],
   ] as Step[],
   notes: ['Keys, queries and the verdict cache stay on the device. No trackers.', 'Two-server PIR assumes the servers do not collude.'] as string[],
-  cropsTitle: 'CROPS, and what each party can see.',
-  crops: [
-    ['Censorship resistance', 'No single party can delete or hide a report, and anyone can run an indexer.'],
-    ['Open source', 'Everything is public under a FOSS license and rebuilds from Arkiv.'],
-    ['Privacy', 'PIR lookups, stealth payouts, and keys and queries that stay on the device.'],
-    ['Security', 'Answers are verified against a root on Arkiv, and the anti-Sybil design limits fake reports.'],
-  ] as Pair[],
-  sees: [
-    ['PIR server A', 'Only a random-looking vector.'],
-    ['PIR server B', 'Only a random-looking vector, one bit different.'],
-    ['Arkiv and indexers', 'Public entities. Never an end-user lookup.'],
-    ['Payout observers', 'A fresh stealth address with no link to the reporter.'],
-    ['An RPC node', 'Your IP address, until Anon-RPC is in place.'],
-  ] as Pair[],
+  // one simple slide per CROPS property: [mark, name, statement, points, honest limit]
+  cropsSlides: [
+    [
+      'CR', 'Censorship resistance', 'No single party can delete or hide a report.',
+      [
+        'Reports are Arkiv entities, owned by the wallet that wrote them.',
+        'Nobody can edit or remove another writer’s entry.',
+        'Anyone can run an indexer and rebuild the list.',
+      ],
+      'The first reviewer panel and the list of trusted sources are seeded by the team, then opened up.',
+    ],
+    [
+      'O', 'Open source', 'Everything is public under a FOSS license.',
+      [
+        'The code lives in a public repo.',
+        'The scoring rule, the PIR servers and the client can be read by anyone.',
+        'The lookup list rebuilds from Arkiv with open tools.',
+      ],
+      'The license file and the AI-use statement are still to be added before submission.',
+    ],
+    [
+      'P', 'Privacy', 'Nobody sees what you checked.',
+      [
+        'PIR: each lookup server sees only a random-looking vector, never the target.',
+        'Stealth bounties: a one-time address, no relayer, no gas link to the reporter.',
+        'Keys and queries stay on the device, with no trackers.',
+      ],
+      'PIR assumes the two servers do not collude. An RPC node can still see your IP until Anon-RPC is in place, and its support is unverified.',
+    ],
+    [
+      'S', 'Security', 'Answers are verified, and fake reports cost money.',
+      [
+        'The client checks every answer against a root published on Arkiv by several indexers.',
+        'Anti-Sybil: weight not count, deposits, reputation and a reviewer panel.',
+        'Block needs 2 or more source types, a ruling, or proof anyone can re-check.',
+      ],
+      'A rich, patient attacker raises the cost, and reviewers could be bribed. Random selection and stake make it harder, not impossible.',
+    ],
+  ] as [string, string, string, string[], string][],
   stackTitle: 'The privacy stack, and the demo.',
   stack: [
     ['Private lookup', '2-server PIR. Neither server learns which entry you asked for.', 'Core'],

@@ -135,3 +135,16 @@
 .slide-table td { font-size: calc(var(--u) * 1.05); padding: calc(var(--u) * 0.45) calc(var(--u) * 0.9); white-space: normal; line-height: 1.25; }
 .slide-table .kind { font-size: max(9px, calc(var(--u) * 0.8)); }
 .k-report, .k-stake, .k-vote, .k-reputation, .k-bounty { background: var(--gold); }
+
+/* ---------- one slide per CROPS property ---------- */
+.crops { flex: 1; min-height: 0; display: grid; grid-template-columns: 0.7fr 1.3fr; gap: calc(var(--u) * 3); align-items: stretch; }
+.crops-mark { display: flex; align-items: center; justify-content: center; background: var(--neon); border: 1px solid var(--ink); font-size: calc(var(--u) * 17); font-weight: 400; letter-spacing: -0.06em; line-height: 1; }
+.crops-body { display: flex; flex-direction: column; gap: calc(var(--u) * 1.6); justify-content: center; }
+.crops-body .s-title { font-size: calc(var(--u) * 4.4); }
+.crops-statement { font-size: calc(var(--u) * 2); line-height: 1.25; letter-spacing: -0.01em; }
+.crops-points { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.crops-points li { padding: calc(var(--u) * 0.9) 0 calc(var(--u) * 0.9) calc(var(--u) * 2.2); border-bottom: 1px solid var(--line); font-size: calc(var(--u) * 1.4); line-height: 1.3; color: var(--navy); position: relative; }
+.crops-points li::before { content: ""; position: absolute; left: 0; top: calc(var(--u) * 1.4); width: calc(var(--u) * 0.8); height: calc(var(--u) * 0.8); background: var(--ink); }
+.crops-limit { border: 1px dashed var(--ink); background: var(--paper); padding: calc(var(--u) * 1) calc(var(--u) * 1.4); display: flex; flex-direction: column; gap: calc(var(--u) * 0.4); }
+.crops-limit p { font-size: calc(var(--u) * 1.15); line-height: 1.35; color: var(--navy); }
+@media (max-width: 900px) { .crops { grid-template-columns: 1fr; } .crops-mark { font-size: calc(var(--u) * 9); padding: 8px 0; } }
