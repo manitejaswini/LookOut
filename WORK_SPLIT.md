@@ -15,8 +15,9 @@ Source of truth for scope is `Lookout PRD (ETHGlobal Mumbai 2026).md`. This file
 ## Next tasks, per developer
 
 **Dev A, in order**
-1. [ ] `arkiv/snapshot-format.md` (Dev B's PIR work depends on it).
-2. [ ] Install `@arkiv-network/sdk` and assert the schema's limits against the real SDK constants.
+1. [x] `arkiv/snapshot-format.md` (Dev B's PIR work depends on it). Done, with tested reference code in `packages/core/src/snapshot.ts`.
+2. [x] Install `@arkiv-network/sdk` and assert the schema's limits against the real SDK constants. Done in `packages/arkiv/src/sdk-limits.test.ts`, all limits match.
+2b. [x] Define the nine schemas in code. Done in `packages/arkiv/src/schemas.ts`, with lifetimes and flags in `lifetimes.ts`.
 3. [ ] Writers for `report`, `verdict` and `attestation` (needs an Arkiv access key and a funded tGLM wallet).
 4. [ ] Indexer v1: Arkiv into SQLite, target to signals, plus the temporary `/lookup` endpoint.
 5. [ ] Wire `scoreTarget` to the indexer output.
