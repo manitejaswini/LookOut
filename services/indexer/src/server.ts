@@ -1,12 +1,14 @@
 import { createServer, type Server } from 'node:http';
-import { ENUMS } from '@lookout/arkiv';
+import { ENUMS, KINDS } from '@lookout/arkiv';
 import type { TargetKind } from '@lookout/core';
 import { lookup, type IndexState } from './lookup.ts';
+import { listEntities } from './entities.ts';
 
 /**
  * TEMPORARY plain lookup endpoint, replaced by PIR in Phase 4.
  *
  *   GET /lookup?kind=domain&value=example.com   -> the CheckResult JSON (private: false, verified: false)
+ *   GET /entities?kind=report&limit=100         -> the entities behind the verdicts, with owner, attributes and expiry
  *   GET /health                                 -> sync status
  *
  * It is NOT private by design: the caller tells it the target. For that reason it binds to 127.0.0.1 by default
@@ -31,6 +33,14 @@ export function startServer(getState: () => IndexState | null, opts: { port?: nu
       return send(200, state
         ? { ok: true, entities: state.entityCount, targets: state.targets.size, dropped: state.dropped.length, block: state.timing.currentBlock, syncedAt: state.syncedAt }
         : { ok: false, error: 'not synced yet' });
+    }
+
+    if (url.pathname === '/entities') {
+      if (!state) return send(503, { error: 'not synced yet' });
+      const kind = url.searchParams.get('kind') ?? undefined;
+      const limit = Number(url.searchParams.get('limit') ?? 200);
+      if (kind && !(KINDS as readonly string[]).includes(kind)) return send(400, { error: `kind must be one of ${KINDS.join(', ')}` });
+      return send(200, listEntities(state, { kind, limit: Number.isFinite(limit) ? limit : 200 }));
     }
 
     if (url.pathname === '/lookup') {

@@ -9,7 +9,7 @@ import { ADDR, DOMAIN, attestation, checkerVerdict, feedVerdict, registry, repor
 
 function stateFrom(entities: Parameters<typeof buildTargets>[0]): IndexState {
   const { targets, dropped } = buildTargets(entities, timing, registry);
-  return { targets, dropped, timing, entityCount: entities.length, syncedAt: 1 };
+  return { targets, dropped, entities, timing, entityCount: entities.length, syncedAt: 1 };
 }
 
 async function withServer(state: IndexState | null, fn: (base: string) => Promise<void>) {

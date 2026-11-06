@@ -5,4 +5,5 @@ export * from './reader.ts';
 export * from './signals.ts';
 export * from './snapshot.ts';
 export * from './lookup.ts';
+export * from './entities.ts';
 export * from './server.ts';

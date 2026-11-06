@@ -22,6 +22,9 @@ const pirClient = pirA && pirB
   : null;
 const live = pirClient ?? (indexerUrl ? createClient({ indexerUrl }) : null);
 
+/** Base URL of Dev A's indexer, if configured. The explorer reads public Arkiv entities from it. */
+export const INDEXER_URL = indexerUrl;
+
 export const MODE: 'pir' | 'indexer' | 'mock' = pirA && pirB ? 'pir' : indexerUrl ? 'indexer' : 'mock';
 export const LIVE = live !== null;
 

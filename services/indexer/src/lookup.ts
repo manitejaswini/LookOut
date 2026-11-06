@@ -1,13 +1,15 @@
 import { normalizeTarget, scoreTarget, targetHash, type CheckResult, type TargetKind } from '@lookout/core';
 import { buildTargets, toScoringInput, type Dropped, type TargetView } from './signals.ts';
 import type { Registry } from './registry.ts';
-import type { BlockTiming } from './types.ts';
+import type { BlockTiming, StoredEntity } from './types.ts';
 import type { Store } from './store.ts';
 
 /** Everything a lookup needs, built once per sync. */
 export interface IndexState {
   targets: Map<string, TargetView>;
   dropped: Dropped[];
+  /** every stored entity, for the explorer. Signals are built from these, so they are the same rows. */
+  entities: StoredEntity[];
   timing: BlockTiming;
   entityCount: number;
   syncedAt: number;
@@ -19,7 +21,7 @@ export function loadState(store: Store, registry: Registry): IndexState | null {
   if (!timing) return null;
   const entities = store.entities();
   const { targets, dropped } = buildTargets(entities, timing, registry);
-  return { targets, dropped, timing, entityCount: entities.length, syncedAt: store.syncedAt() ?? 0 };
+  return { targets, dropped, entities, timing, entityCount: entities.length, syncedAt: store.syncedAt() ?? 0 };
 }
 
 export interface PlainLookupResult extends CheckResult {
