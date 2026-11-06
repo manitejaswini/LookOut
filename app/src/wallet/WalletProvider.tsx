@@ -85,8 +85,13 @@ export function WalletProvider({ children }: { children: ReactNode }) {
     }
   }, [provider]);
 
-  // a wallet cannot be "disconnected" by a site, so this only makes the app forget the address until the next connect
-  const disconnect = useCallback(() => setAddress(null), []);
+  // Forget the address AND ask the wallet to revoke this site's permissions, so the next "Connect wallet" shows the full connection
+  // dialog again, where the person can tick every network (Sepolia for deposits, Rabdi for Arkiv). That dialog is the reliable place
+  // to grant a network the site was never given. Older wallets without revoke simply keep their connection.
+  const disconnect = useCallback(() => {
+    setAddress(null);
+    window.ethereum?.request({ method: 'wallet_revokePermissions', params: [{ eth_accounts: {} }] }).catch(() => {});
+  }, []);
 
   const switchChain = useCallback(async (name: ChainName) => {
     const chain: Chain = chainFor(name);

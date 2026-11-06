@@ -24,7 +24,7 @@ export function underlying(e: unknown): string {
   const text = String((e as { message?: string })?.message ?? e) + ' ' + String(((e as { cause?: { message?: string } })?.cause?.message) ?? '');
   // EIP-1193 error 4100: the wallet has not given THIS site permission on THIS network (or for this account)
   if (/not been authorized|UnauthorizedProvider/i.test(text)) {
-    return 'Your wallet has not given this site permission on this network. Open MetaMask, go to Connected sites (or Settings, then Connections), choose localhost:3000, press Edit, tick the Rabdi network and the account, press Update, then press Retry.';
+    return 'Your wallet has not given this site permission on the Rabdi network. Click your address in the top right to disconnect, then press Connect wallet again, and in MetaMask's dialog tick BOTH Sepolia and Rabdi before you connect. Then press Retry posting.';
   }
   const parts: string[] = [];
   let cur: unknown = e;

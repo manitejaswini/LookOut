@@ -13,7 +13,7 @@ export default function ConnectButton() {
     return <button className="connect" type="button" onClick={() => void w.connect()}>Connect wallet</button>;
   }
   return (
-    <button className="connect connect-on" type="button" onClick={w.disconnect} title="Forget this address in the app (your wallet stays connected until you disconnect it there)">
+    <button className="connect connect-on" type="button" onClick={w.disconnect} title="Disconnect this site. Connect again afterwards and tick every network (Sepolia and Rabdi) in the wallet's dialog">
       {short(w.address)}
     </button>
   );
