@@ -1,6 +1,6 @@
 # Lookout Arkiv schema (v0.2)
 
-This is the contract for every Arkiv entity Lookout reads or writes. Dev A owns it. Dev B reads it and does not edit it without Dev A's OK in the pull request. It follows the PRD ("Architecture and Arkiv data model"), and since v0.1 it is checked against the Arkiv docs and the published SDK (see [Sources](#sources-and-verification)).
+This is the contract for every Arkiv entity Lookout reads or writes. It follows the PRD ("Architecture and Arkiv data model"), and since v0.1 it is checked against the Arkiv docs and the published SDK (see [Sources](#sources-and-verification)).
 
 **v0.2 simplified the design.** There is no reviewer vote and no stealth bounty any more. A report is settled by evidence (a trusted source corroborates it), a bounty is credited to the reporter inside the escrow, and a single operator key publishes rulings with public reasons. The `vote` and `bounty` entity kinds are gone, leaving seven.
 

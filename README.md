@@ -154,6 +154,31 @@ Code: [`packages/worldid`](packages/worldid), UI: `app/src/VerifyHuman.tsx`.
 
 ---
 
+## Arkiv Track Submission
+
+| Requirement | Where |
+| --- | --- |
+| Entities, queried fields, owners, expiry | [`arkiv/schema.md`](arkiv/schema.md) |
+| Feedback for Arkiv | [`arkiv/friction.md`](arkiv/friction.md) |
+| Reach | [`arkiv/reach.md`](arkiv/reach.md) |
+| Why Arkiv | [`arkiv/why-arkiv.md`](arkiv/why-arkiv.md) |
+| Data quality | [`arkiv/data-quality.md`](arkiv/data-quality.md) |
+| Network and SDK | Arkiv Rabdi testnet (chain id 7794095), `@arkiv-network/sdk` |
+
+**Wallets that wrote entities** (public addresses):
+
+- `0x37324A0CC17959Ee99233c8552e741519983573E`: the operator, indexer, and the demo `lookout-checker` and `openfeed-demo` sources. Writes `verdict`, `stake`, `ruling`, `reputation` and `snapshot`.
+- `0x6046Ff995Fee7125e7459311A5152c404e73b7dF` and `0x2357225767F9Bf9f2f06F75bA6b060266822Fd34`: test reporter wallets. Write `report` and `attestation`.
+
+**One query you can run** (read-only, needs `ARKIV_ACCESS_KEY` in `.env`):
+
+```
+npm run arkiv:query                 # live entity count per schema, and who wrote each
+npm run arkiv:query -- verdict      # every live verdict with its creator and expiry block
+```
+
+**Import and write scripts** (all in this repo, re-runnable): `npm run demo:seed`, `npm run demo:flag -- <target>`, `npm run indexer:sync`, `npm run indexer:publish`, `npm run operator:run`, and `npm run e2e:live`. **Honest status:** the live verdicts are labelled demo fixtures, and there is no importer for a real external feed yet. **Data license:** the entities are created by Lookout itself, so no third-party dataset license applies. The code is MIT. No Sourcify data is used.
+
 ## The Escrow Contract
 
 `contracts/src/LookoutEscrow.sol` (Foundry, 25 Solidity tests, plus 11 anvil client tests).

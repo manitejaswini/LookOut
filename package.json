@@ -17,6 +17,7 @@
     "arkiv:check": "node scripts/check-arkiv.mjs",
     "arkiv:smoke": "node scripts/arkiv-smoke.mjs",
     "arkiv:demo": "node scripts/arkiv-demo.mjs",
+    "arkiv:query": "node scripts/arkiv-query.mjs",
     "indexer:sync": "npm run sync -w @lookout/indexer",
     "indexer:serve": "npm run serve -w @lookout/indexer",
     "check": "npm run check -w @lookout/workers --",
