@@ -2,7 +2,7 @@
 
 > **Before you send money or sign, Lookout tells you whether the address is flagged, why, and where to verify it, without learning what you asked. The data lives on Arkiv, and the people who report scams are real humans (World ID) who put money behind what they say.**
 
-> ETHGlobal Mumbai 2026. Sponsor tracks: **Arkiv** and **World ID**. This is a hackathon build on testnets. Read [What is not done](#what-is-not-done) before trusting any claim here.
+> ETHGlobal Mumbai 2026. Sponsor tracks: **Arkiv** and **World ID**. This is a hackathon build on testnets. Read [Trust Limits](#trust-limits-said-plainly) before trusting any claim here.
 
 ---
 
@@ -67,7 +67,7 @@ Reputation: +10 per confirmed report, losses count double, a 30-day half-life, a
 | Open scam-report sites | no | partly | no (free) | no | informal |
 | **Lookout** | **yes (2-server PIR)** | **yes (root on Arkiv)** | **yes (escrow deposit)** | **yes (World ID)** | **yes (owner signs with the address)** |
 
-This table describes design intent. See [What is not done](#what-is-not-done) for what is only proven on testnet.
+This table describes design intent. See [Trust Limits](#trust-limits-said-plainly) for what is only proven on testnet.
 
 ---
 
