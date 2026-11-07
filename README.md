@@ -262,8 +262,7 @@ Lookout/
 │   └── operator/           settles reports, mirrors stakes, publishes rulings. See its README
 ├── app/                    Next.js app: Check, Pay, Report, Dispute, Verify, Funds, and the pitch decks
 ├── arkiv/                  schema.md and snapshot-format.md
-├── scripts/                live end-to-end run, demo seed and flag helpers, escrow deploy and fund
-└── HANDOFF.md              state, gotchas and the to-do list for the next developer
+└── scripts/                live end-to-end run, demo seed and flag helpers, escrow deploy and fund
 ```
 
 ---
@@ -341,15 +340,7 @@ The "verified human" in the live script is faked in the local seat database, bec
 - **Owner disputes cover wallet addresses only.** A contract has no key, and a domain needs a different proof.
 - **The live "flags" are demo fixtures**, labelled as such, not real detection.
 
-## What Is Not Done
-
-- A real World ID scan end to end after the legacy-proof fix (World App verified the person, our server had rejected a legacy proof, now accepted but not re-scanned).
-- Browser wallet checks still to do by hand: claiming a refund on Funds, Dispute, and the uncorroborated-refund wait.
-- A second, independent lookup operator.
-- Real intelligence sources: the feed importer and checker lists that cite evidence.
-- Hosting. Everything runs on one laptop. The World ID seat database is a local SQLite file, so the app needs a persistent host to enroll humans.
-
-More detail and gotchas for the next developer: [`HANDOFF.md`](HANDOFF.md) and [`services/operator/README.md`](services/operator/README.md).
+More detail: [`services/operator/README.md`](services/operator/README.md).
 
 ---
 
