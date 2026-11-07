@@ -32,6 +32,8 @@ interface SignedRequest {
   app_id: `app_${string}`;
   action: string;
   environment: 'production' | 'staging' | 'sandbox';
+  /** whether this server also accepts World ID 3.0 proofs. The widget must ask for the same thing the server will accept */
+  allow_legacy_proofs?: boolean;
 }
 
 const WALLET = /^0x[0-9a-fA-F]{40}$/;
@@ -178,8 +180,8 @@ export default function VerifyHuman() {
           action={request.action}
           rp_context={request.rp_context}
           environment={request.environment}
-          // v4 proofs only: accepting legacy v3 proofs would give the same person a second nullifier, and so a second seat
-          allow_legacy_proofs={false}
+          // matches the server's setting: with legacy allowed, a 3.0 proof is accepted too (see config.ts for the trade-off)
+          allow_legacy_proofs={request.allow_legacy_proofs ?? false}
           preset={proofOfHuman({ signal: wallet.trim().toLowerCase() })}
           handleVerify={handleVerify}
           onSuccess={onSuccess}

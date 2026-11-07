@@ -6,6 +6,7 @@
  *   NEXT_PUBLIC_WORLD_RP_ID    rp_xxxxx    from the Developer Portal (public)
  *   RP_SIGNING_KEY             32-byte hex from the Developer Portal (SECRET, server only)
  *   WORLD_ID_ENVIRONMENT       production (default) | staging | sandbox
+ *   WORLD_ID_ALLOW_LEGACY      optional: accept World ID 3.0 (legacy) proofs as well as 4.0. Default true, see below
  *   WORLD_ID_ACTION            optional: the action name registered in the Developer Portal (default lookout-verified-human-v1)
  *
  * `production` is the default on purpose: a deployment that forgets to set it rejects test proofs instead of accepting them.
@@ -34,6 +35,13 @@ export interface WorldIdConfig {
   signingKeyHex: string;
   environment: WorldEnvironment;
   action: string;
+  /**
+   * Accept World ID 3.0 (legacy) proofs as well as 4.0. World App returns a legacy proof to people whose credential has not moved to
+   * 4.0, so refusing them locks real people out. The cost, stated plainly: a human has a different nullifier under 3.0 and 4.0, so one
+   * person who holds BOTH could verify two wallets. A person with a 4.0 credential always gets a 4.0 proof, so doing this takes effort.
+   * Set WORLD_ID_ALLOW_LEGACY=false to require 4.0 only.
+   */
+  allowLegacy: boolean;
   /** POST {verifyBaseUrl}/{rpId} */
   verifyBaseUrl: string;
 }
@@ -75,6 +83,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       signingKeyHex: rawKey!.replace(/^0x/, ''),
       environment: environment as WorldEnvironment,
       action: resolveAction(env),
+      allowLegacy: !['false', '0', 'no', 'off'].includes((env.WORLD_ID_ALLOW_LEGACY ?? '').trim().toLowerCase()),
       verifyBaseUrl: env.WORLD_ID_VERIFY_BASE_URL?.trim() || DEFAULT_VERIFY_BASE_URL,
     },
   };

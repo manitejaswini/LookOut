@@ -88,6 +88,7 @@ export async function handleRpSignature(req: Request, deps: HandlerDeps): Promis
     app_id: c.config.appId,
     action: c.config.action,
     environment: c.config.environment,
+    allow_legacy_proofs: c.config.allowLegacy,
   });
 }
 

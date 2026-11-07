@@ -119,8 +119,12 @@ export async function verifyProofOfHuman(args: {
   if (!p || typeof p !== 'object' || Array.isArray(p)) throw new WorldIdError('bad_payload', 'the proof payload is missing');
 
   // 1. protocol, environment and action
-  if (typeof p.protocol_version !== 'string' || !p.protocol_version.startsWith('4')) {
-    throw new WorldIdError('wrong_protocol', 'only World ID 4.0 proofs are accepted (legacy proofs would give a second nullifier per human)');
+  const legacy = typeof p.protocol_version === 'string' && p.protocol_version.startsWith('3');
+  const current = typeof p.protocol_version === 'string' && p.protocol_version.startsWith('4');
+  if (!current && !(legacy && config.allowLegacy)) {
+    throw new WorldIdError('wrong_protocol', legacy
+      ? 'this server accepts World ID 4.0 proofs only. Update World App, or ask the operator to allow legacy proofs'
+      : 'the proof is not a World ID proof this server understands');
   }
   if (p.environment !== config.environment) {
     throw new WorldIdError('wrong_environment', `this server only accepts ${config.environment} proofs`);
@@ -129,8 +133,10 @@ export async function verifyProofOfHuman(args: {
 
   // 2. the credential
   const responses = Array.isArray(p.responses) ? (p.responses as ProofResponse[]) : [];
-  const item = responses.find((r) => r && typeof r === 'object' && r.identifier === PROOF_OF_HUMAN);
-  if (!item || (item.issuer_schema_id !== undefined && item.issuer_schema_id !== PROOF_OF_HUMAN_SCHEMA_ID)) {
+  // a 3.0 proof names its credential `proof_of_human` or, for older Orb proofs, `orb`, and carries no issuer schema id
+  const names = legacy ? [PROOF_OF_HUMAN, 'orb'] : [PROOF_OF_HUMAN];
+  const item = responses.find((r) => r && typeof r === 'object' && typeof r.identifier === 'string' && names.includes(r.identifier));
+  if (!item || (!legacy && item.issuer_schema_id !== undefined && item.issuer_schema_id !== PROOF_OF_HUMAN_SCHEMA_ID)) {
     throw new WorldIdError('wrong_credential', 'a Proof of Human credential is required');
   }
 
@@ -143,8 +149,9 @@ export async function verifyProofOfHuman(args: {
   }
   if (!signalOk) throw new WorldIdError('signal_mismatch', 'the proof is not bound to this wallet');
 
-  // 4. the nullifier
-  const nullifier = canonicalNullifier(item.nullifier);
+  // 4. the nullifier. A 3.0 and a 4.0 nullifier are different numbers for the same human, so they are kept in separate namespaces
+  // and can never be mistaken for one another.
+  const nullifier = (legacy ? 'v3:' : '') + canonicalNullifier(item.nullifier);
 
   // 5. World's own check. The payload is forwarded as received, only with our expected environment set.
   const doFetch = args.fetchImpl ?? fetch;

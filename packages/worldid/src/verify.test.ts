@@ -48,7 +48,7 @@ test('a proof for a different action is refused', async () => {
   assert.equal(w.calls.length, 0);
 });
 
-test('legacy 3.0 proofs are refused, because they would give the same human a second nullifier', async () => {
+test('legacy 3.0 proofs are refused when the server is set to 4.0 only (they would give the same human a second nullifier)', async () => {
   for (const v of ['3.0', '', undefined]) {
     const p = payload();
     if (v === undefined) delete p.protocol_version; else p.protocol_version = v;
@@ -130,4 +130,49 @@ test('normalizeWallet lowercases a good address and refuses everything else', ()
   for (const bad of [undefined, null, 5, '', '0x123', WALLET_A.slice(2), `${WALLET_A}00`, '0xZZ324a0cc17959ee99233c8552e741519983573e']) {
     assert.throws(() => normalizeWallet(bad), (e: unknown) => e instanceof WorldIdError && e.code === 'bad_wallet', String(bad));
   }
+});
+
+/* ---------- legacy (World ID 3.0) proofs ---------- */
+
+import { legacyPayload } from './fixtures.ts';
+
+test('LEGACY: a 3.0 proof-of-human is accepted when allowed, forwarded to World unchanged, and its nullifier lives in its own namespace', async () => {
+  const w = fakeWorld();
+  const p = legacyPayload();
+  const r = await verifyProofOfHuman({ payload: p, wallet: WALLET_A, config: { ...config, allowLegacy: true }, fetchImpl: w.fetchImpl });
+  assert.match(r.nullifier, /^v3:/);
+  assert.equal(w.calls.length, 1);
+  assert.equal(w.calls[0].body.protocol_version, '3.0', 'World gets the proof as World App produced it');
+});
+
+test('LEGACY: refused when the operator turns it off, with a message that says what to do', async () => {
+  await assert.rejects(
+    verifyProofOfHuman({ payload: legacyPayload(), wallet: WALLET_A, config: { ...config, allowLegacy: false }, fetchImpl: fakeWorld().fetchImpl }),
+    (e: unknown) => e instanceof WorldIdError && e.code === 'wrong_protocol' && /4\.0 proofs only/.test(e.message),
+  );
+});
+
+test('LEGACY: every other check still applies: the wallet binding, the action, the environment and the credential', async () => {
+  const on = { ...config, allowLegacy: true };
+  const bad: [string, Record<string, unknown>, string][] = [
+    ['another wallet', legacyPayload({ wallet: WALLET_B }), 'signal_mismatch'],
+    ['another action', legacyPayload({ action: 'some-other-action' }), 'wrong_action'],
+    ['another environment', legacyPayload({ environment: 'production' }), 'wrong_environment'],
+    ['a different credential', legacyPayload({ identifier: 'selfie' }), 'wrong_credential'],
+  ];
+  for (const [name, p, code] of bad) {
+    await assert.rejects(verifyProofOfHuman({ payload: p, wallet: WALLET_A, config: on, fetchImpl: fakeWorld().fetchImpl }), (e: unknown) => e instanceof WorldIdError && e.code === code, name);
+  }
+});
+
+test('LEGACY: the old `orb` credential name is accepted for a 3.0 proof, and a 4.0 proof never is', async () => {
+  const on = { ...config, allowLegacy: true };
+  assert.ok(await verifyProofOfHuman({ payload: legacyPayload({ identifier: 'orb' }), wallet: WALLET_A, config: on, fetchImpl: fakeWorld().fetchImpl }));
+  await assert.rejects(verifyProofOfHuman({ payload: payload({ identifier: 'orb' }), wallet: WALLET_A, config: on, fetchImpl: fakeWorld().fetchImpl }), (e: unknown) => e instanceof WorldIdError && e.code === 'wrong_credential');
+});
+
+test('LEGACY: a 3.0 and a 4.0 proof from the same human are different keys, so neither can overwrite the other', async () => {
+  const a = await verifyProofOfHuman({ payload: payload(), wallet: WALLET_A, config: { ...config, allowLegacy: true }, fetchImpl: fakeWorld().fetchImpl });
+  const b = await verifyProofOfHuman({ payload: legacyPayload({ nullifier: HUMAN_1 }), wallet: WALLET_A, config: { ...config, allowLegacy: true }, fetchImpl: fakeWorld().fetchImpl });
+  assert.notEqual(a.nullifier, b.nullifier);
 });

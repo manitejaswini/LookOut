@@ -11,6 +11,8 @@ export const config: WorldIdConfig = {
   signingKeyHex: SIGNING_KEY,
   environment: 'staging',
   action: HUMAN_ACTION,
+  // the long-standing tests exercise the strict path. The legacy tests switch this on explicitly
+  allowLegacy: false,
   verifyBaseUrl: 'https://verify.test/api/v4/verify',
 };
 
@@ -69,4 +71,23 @@ export function fakeWorld(reply: { status?: number; body?: unknown; throws?: boo
     });
   }) as unknown as typeof fetch;
   return { fetchImpl, calls };
+}
+
+/** A legacy (World ID 3.0) proof-of-human response: hex proof, merkle root and nullifier, and no issuer schema id. */
+export function legacyPayload(o: PayloadOptions & { identifier?: string } = {}): Record<string, unknown> {
+  return {
+    protocol_version: '3.0',
+    nonce: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+    action: o.action ?? HUMAN_ACTION,
+    environment: o.environment ?? 'staging',
+    responses: [
+      {
+        identifier: o.identifier ?? 'proof_of_human',
+        signal_hash: 'signal_hash' in o ? o.signal_hash : hashSignal(o.wallet ?? WALLET_A),
+        proof: '0x' + '1a'.repeat(256),
+        merkle_root: '0x' + '2b'.repeat(32),
+        nullifier: o.nullifier ?? '0x' + '3c'.repeat(31),
+      },
+    ],
+  };
 }
